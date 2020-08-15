@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"image/color"
 	"math"
 
@@ -134,7 +133,7 @@ func (player *Player) ray(env *Enviroment, angledif float64) [2]float64 {
 			curpos = [2]float64{curpos[0] + cos*vermult, curpos[1] + ver}
 			textureIndex = curpos[0] - float64(curcell[0])
 		}
-		player.intersection = curpos
+		//player.intersection = curpos
 		dist = math.Min(dist+math.Sqrt(math.Min(horlen, verlen)), float64(player.maxDist))
 		if curcell[0] < 0 || curcell[0] >= env.cellsx ||
 			curcell[1] < 0 || curcell[1] >= env.cellsy {
@@ -148,19 +147,19 @@ func (player *Player) ray(env *Enviroment, angledif float64) [2]float64 {
 }
 
 func (player *Player) draw3D(screen *ebiten.Image, env *Enviroment) {
-	//Draw the floor
+	//Draw the floor and ceiling
 	twidth := env.textures[0].Bounds().Max.X
 	theight := env.textures[0].Bounds().Max.Y
 	swidth := screen.Bounds().Max.X
 	sheight := screen.Bounds().Max.Y
-	rayDirY0 := math.Sin(player.angle - player.fov/2)
-	rayDirX0 := math.Cos(player.angle-player.fov/2) * (1 / rayDirY0)
-	rayDirY1 := math.Sin(player.angle + player.fov/2)
-	rayDirX1 := math.Cos(player.angle+player.fov/2) * (1 / rayDirY1)
-	rayDirY0, rayDirY1 = 1, 1
-	fmt.Println([]float64{math.Sin(player.angle - player.fov/2), math.Sin(player.angle + player.fov/2)})
+	ratio := 1 / math.Cos(player.fov/2)
+	rayDirY0 := math.Sin(player.angle-player.fov/2) * ratio
+	rayDirX0 := math.Cos(player.angle-player.fov/2) * ratio
+	rayDirY1 := math.Sin(player.angle+player.fov/2) * ratio
+	rayDirX1 := math.Cos(player.angle+player.fov/2) * ratio
+
 	for y := 0; y < sheight/2; y++ {
-		rowDist := ((float64(sheight) / 2) / (float64(sheight)/2 - float64(y))) * 1
+		rowDist := ((float64(sheight) / 2) / (float64(sheight)/2 - float64(y)))
 
 		floorStepX := rowDist * (rayDirX1 - rayDirX0) / float64(swidth)
 		floorStepY := rowDist * (rayDirY1 - rayDirY0) / float64(swidth)
@@ -201,7 +200,18 @@ func (player *Player) draw3D(screen *ebiten.Image, env *Enviroment) {
 }
 
 func (player *Player) draw2D(screen *ebiten.Image) {
-	ebitenutil.DrawRect(screen, player.x-5, player.y-5, 10, 10, color.RGBA{255, 255, 255, 255})
-	ebitenutil.DrawRect(screen, player.intersection[0]-5, player.intersection[1]-5, 10, 10, color.RGBA{0, 0, 255, 255})
-	ebitenutil.DrawLine(screen, player.x, player.y, player.x+math.Cos(player.angle)*player.frontRay, player.y+math.Sin(player.angle)*player.frontRay, color.RGBA{0, 255, 0, 255})
+	cellsizex := float64(screen.Bounds().Max.X / env.cellsx)
+	cellsizey := float64(screen.Bounds().Max.Y / env.cellsy)
+	ebitenutil.DrawRect(screen, player.x*cellsizex-5, player.y*cellsizey-5, 10, 10, color.RGBA{255, 255, 255, 255})
+	//ebitenutil.DrawRect(screen, player.intersection[0]*cellsizex-5, player.intersection[1]*cellsizey-5, 10, 10, color.RGBA{0, 0, 255, 255})
+	ebitenutil.DrawLine(screen, player.x*cellsizex, player.y*cellsizey, (player.x+math.Cos(player.angle)*player.frontRay)*cellsizex, (player.y+math.Sin(player.angle)*player.frontRay)*cellsizey, color.RGBA{0, 255, 0, 255})
+
+	ratio := 1 / math.Cos(player.fov/2)
+	rayDirY0 := math.Sin(player.angle-player.fov/2) * ratio
+	rayDirX0 := math.Cos(player.angle-player.fov/2) * ratio
+	rayDirY1 := math.Sin(player.angle+player.fov/2) * ratio
+	rayDirX1 := math.Cos(player.angle+player.fov/2) * ratio
+	ebitenutil.DrawLine(screen, player.x*cellsizex, player.y*cellsizey, (player.x+rayDirX0)*cellsizex, (player.y+rayDirY0)*cellsizey, color.RGBA{0, 255, 255, 255})
+	ebitenutil.DrawLine(screen, player.x*cellsizex, player.y*cellsizey, (player.x+rayDirX1)*cellsizex, (player.y+rayDirY1)*cellsizey, color.RGBA{0, 255, 255, 255})
+	ebitenutil.DrawLine(screen, player.x*cellsizex, player.y*cellsizey, (player.x+math.Cos(player.angle))*cellsizex, (player.y+math.Sin(player.angle))*cellsizey, color.RGBA{255, 0, 255, 255})
 }

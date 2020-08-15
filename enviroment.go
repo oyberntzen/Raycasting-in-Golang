@@ -56,8 +56,8 @@ func (env *Enviroment) init(cellsx, cellsy int) {
 		env.cells = append(env.cells, row)
 	}
 
-	f, _ := os.Open("./wall.png")
-	f2, _ := os.Open("./bricks2.jpg")
+	f, _ := os.Open("./floor.png")
+	f2, _ := os.Open("./wall.jpg")
 	wall, _, _ := image.Decode(f)
 	bricks2, _ := jpeg.Decode(f2)
 	env.textures = append(env.textures, wall)
