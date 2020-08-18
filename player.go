@@ -43,19 +43,69 @@ func (player *Player) init(ratio float64, x float64, y float64, angle float64) {
 
 func (player *Player) update(screen *ebiten.Image, env *Enviroment, start bool) {
 	changed := false
-	forwardX := player.posX + player.dirX*player.walkSpeed
-	forwardY := player.posY + player.dirY*player.walkSpeed
-	if ebiten.IsKeyPressed(ebiten.KeyW) && env.cells[int(math.Max(0, math.Min(float64(env.cellsx-1), forwardX)))][int(math.Max(0, math.Min(float64(env.cellsx-1), forwardY)))] == 0 {
-		changed = true
-		player.posX += player.dirX * player.walkSpeed
-		player.posY += player.dirY * player.walkSpeed
+	if ebiten.IsKeyPressed(ebiten.KeyW) {
+		nextX := player.posX + player.dirX*player.walkSpeed
+		nextY := player.posY + player.dirY*player.walkSpeed
+		var goX bool
+		var goY bool
+		if round(nextX) == round(player.posX) {
+			goX = true
+		} else if nextX > 0 && nextX < float64(env.cellsx) {
+			if env.cells[int(player.posY)][int(nextX)] == 0 {
+				goX = true
+			}
+		} else if nextX > 0 && nextX < float64(env.cellsx) {
+			goX = true
+		}
+		if round(nextY) == round(player.posY) {
+			goY = true
+		} else if nextY > 0 && nextY < float64(env.cellsy) {
+			if env.cells[int(nextY)][int(player.posX)] == 0 {
+				goY = true
+			}
+		} else if nextY > 0 && nextY < float64(env.cellsy) {
+			goY = true
+		}
+		if goX {
+			player.posX += player.dirX * player.walkSpeed
+			changed = true
+		}
+		if goY {
+			player.posY += player.dirY * player.walkSpeed
+			changed = true
+		}
 	}
-	backwardX := player.posX - player.dirX*player.walkSpeed
-	backwardY := player.posY - player.dirY*player.walkSpeed
-	if ebiten.IsKeyPressed(ebiten.KeyS) && env.cells[int(math.Max(0, math.Min(float64(env.cellsx-1), backwardX)))][int(math.Max(0, math.Min(float64(env.cellsx-1), backwardY)))] == 0 {
-		changed = true
-		player.posX -= player.dirX * player.walkSpeed
-		player.posY -= player.dirY * player.walkSpeed
+	if ebiten.IsKeyPressed(ebiten.KeyS) {
+		nextX := player.posX - player.dirX*player.walkSpeed
+		nextY := player.posY - player.dirY*player.walkSpeed
+		var goX bool
+		var goY bool
+		if round(nextX) == round(player.posX) {
+			goX = true
+		} else if nextX > 0 && nextX < float64(env.cellsx) {
+			if env.cells[int(player.posY)][int(nextX)] == 0 {
+				goX = true
+			}
+		} else if nextX > 0 && nextX < float64(env.cellsx) {
+			goX = true
+		}
+		if round(nextY) == round(player.posY) {
+			goY = true
+		} else if nextY > 0 && nextY < float64(env.cellsy) {
+			if env.cells[int(nextY)][int(player.posX)] == 0 {
+				goY = true
+			}
+		} else if nextY > 0 && nextY < float64(env.cellsy) {
+			goY = true
+		}
+		if goX {
+			player.posX -= player.dirX * player.walkSpeed
+			changed = true
+		}
+		if goY {
+			player.posY -= player.dirY * player.walkSpeed
+			changed = true
+		}
 	}
 	if ebiten.IsKeyPressed(ebiten.KeyA) {
 		changed = true
@@ -80,9 +130,6 @@ func (player *Player) update(screen *ebiten.Image, env *Enviroment, start bool) 
 		player.planeY = player.planeY*math.Cos(0.02) + oldPlaneX*math.Sin(0.02)
 	}
 
-	player.posX = math.Max(0.001, math.Min(float64(env.cellsx)-0.001, player.posX))
-	player.posY = math.Max(0.001, math.Min(float64(env.cellsy)-0.001, player.posY))
-
 	if changed || start {
 		player.frontRay = player.ray(env, 0)[0]
 		player.rays = [][2]float64{}
@@ -90,9 +137,7 @@ func (player *Player) update(screen *ebiten.Image, env *Enviroment, start bool) 
 		for x := 0; x < width; x++ {
 			cameraX := (float64(x)/float64(width))*2 - 1
 			ray := player.ray(env, cameraX)
-			//real := ray[0] / math.Sqrt(cameraX*cameraX+1)
-			//fmt.Println([2]float64{real, ray[0]})
-			player.rays = append(player.rays, ray) //[2]float64{real, ray[1]})
+			player.rays = append(player.rays, ray)
 		}
 	}
 }
@@ -159,7 +204,6 @@ func (player *Player) ray(env *Enviroment, cameraX float64) [2]float64 {
 			curpos = [2]float64{curpos[0] + rayDirX*vermult, curpos[1] + ver}
 			textureIndex = curpos[0] - float64(curcell[0])
 		}
-		//player.intersection = curpos
 		dist = math.Min(dist+math.Sqrt(math.Min(horlen, verlen)), float64(player.maxDist))
 		var realDist float64
 		if side == 0 {
@@ -245,4 +289,11 @@ func (player *Player) draw2D(screen *ebiten.Image) {
 	ebitenutil.DrawLine(screen, player.posX*cellsizex, player.posY*cellsizey, (player.posX+rayDirX0)*cellsizex, (player.posY+rayDirY0)*cellsizey, color.RGBA{0, 255, 255, 255})
 	ebitenutil.DrawLine(screen, player.posX*cellsizex, player.posY*cellsizey, (player.posX+rayDirX1)*cellsizex, (player.posY+rayDirY1)*cellsizey, color.RGBA{0, 255, 255, 255})
 	ebitenutil.DrawLine(screen, player.posX*cellsizex, player.posY*cellsizey, (player.posX+player.dirX)*cellsizex, (player.posY+player.dirY)*cellsizey, color.RGBA{255, 0, 255, 255})
+}
+
+func round(number float64) int {
+	if number < 0 {
+		number--
+	}
+	return int(number)
 }
