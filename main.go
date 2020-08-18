@@ -9,15 +9,13 @@ import (
 
 var player Player
 var env Enviroment
-var firstFrame bool = true
 
 //Game is the struct that implements ebiten.Game
 type Game struct{}
 
 //Update handles the logic. 60fps
 func (g *Game) Update(screen *ebiten.Image) error {
-	player.update(screen, &env, firstFrame)
-	firstFrame = false
+	player.update(screen, &env)
 	return nil
 }
 

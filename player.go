@@ -19,13 +19,16 @@ type Player struct {
 	planeX float64
 	planeY float64
 
+	pitch float64
+	posZ  float64
+	velZ  float64
+
 	rays []Ray
 
 	maxDist   int
 	walkSpeed float64
 
-	frontRay     float64
-	intersection [2]float64
+	frontRay float64
 }
 
 func (player *Player) init(x float64, y float64, angle float64) {
@@ -37,96 +40,24 @@ func (player *Player) init(x float64, y float64, angle float64) {
 
 	player.maxDist = 20
 	player.walkSpeed = 0.03
+
+	player.pitch = 0
+	player.posZ = 0
 }
 
-func (player *Player) update(screen *ebiten.Image, env *Enviroment, start bool) {
-	changed := false
-	if ebiten.IsKeyPressed(ebiten.KeyW) {
-		nextX := player.posX + player.dirX*player.walkSpeed
-		nextY := player.posY + player.dirY*player.walkSpeed
-		var goX bool
-		var goY bool
-		if round(nextX) == round(player.posX) {
-			goX = true
-		} else if nextX > 0 && nextX < float64(env.cellsx) {
-			if env.cells[int(player.posY)][int(nextX)] == 0 {
-				goX = true
-			}
-		} else if nextX > 0 && nextX < float64(env.cellsx) {
-			goX = true
-		}
-		if round(nextY) == round(player.posY) {
-			goY = true
-		} else if nextY > 0 && nextY < float64(env.cellsy) {
-			if env.cells[int(nextY)][int(player.posX)] == 0 {
-				goY = true
-			}
-		} else if nextY > 0 && nextY < float64(env.cellsy) {
-			goY = true
-		}
-		if goX {
-			player.posX += player.dirX * player.walkSpeed
-			changed = true
-		}
-		if goY {
-			player.posY += player.dirY * player.walkSpeed
-			changed = true
-		}
-	}
-	if ebiten.IsKeyPressed(ebiten.KeyS) {
-		nextX := player.posX - player.dirX*player.walkSpeed
-		nextY := player.posY - player.dirY*player.walkSpeed
-		var goX bool
-		var goY bool
-		if round(nextX) == round(player.posX) {
-			goX = true
-		} else if nextX > 0 && nextX < float64(env.cellsx) {
-			if env.cells[int(player.posY)][int(nextX)] == 0 {
-				goX = true
-			}
-		} else if nextX > 0 && nextX < float64(env.cellsx) {
-			goX = true
-		}
-		if round(nextY) == round(player.posY) {
-			goY = true
-		} else if nextY > 0 && nextY < float64(env.cellsy) {
-			if env.cells[int(nextY)][int(player.posX)] == 0 {
-				goY = true
-			}
-		} else if nextY > 0 && nextY < float64(env.cellsy) {
-			goY = true
-		}
-		if goX {
-			player.posX -= player.dirX * player.walkSpeed
-			changed = true
-		}
-		if goY {
-			player.posY -= player.dirY * player.walkSpeed
-			changed = true
-		}
-	}
-	if ebiten.IsKeyPressed(ebiten.KeyA) {
-		changed = true
+func (player *Player) update(screen *ebiten.Image, env *Enviroment) {
+	player.handleInput()
 
-		player.dirX, player.dirY = rotate(player.dirX, player.dirY, -0.02)
-		player.planeX, player.planeY = rotate(player.planeX, player.planeY, -0.02)
-	}
-	if ebiten.IsKeyPressed(ebiten.KeyD) {
-		changed = true
+	player.velZ -= 1
+	player.posZ = math.Max(player.posZ+player.velZ, 0)
 
-		player.dirX, player.dirY = rotate(player.dirX, player.dirY, 0.02)
-		player.planeX, player.planeY = rotate(player.planeX, player.planeY, 0.02)
-	}
-
-	if changed || start {
-		player.frontRay = player.ray(env, 0).length
-		player.rays = []Ray{}
-		width := screen.Bounds().Max.X
-		for x := 0; x < width; x++ {
-			cameraX := (float64(x)/float64(width))*2 - 1
-			ray := player.ray(env, cameraX)
-			player.rays = append(player.rays, ray)
-		}
+	player.frontRay = player.ray(env, 0).length
+	player.rays = []Ray{}
+	width := screen.Bounds().Max.X
+	for x := 0; x < width; x++ {
+		cameraX := (float64(x)/float64(width))*2 - 1
+		ray := player.ray(env, cameraX)
+		player.rays = append(player.rays, ray)
 	}
 }
 
@@ -222,8 +153,20 @@ func (player *Player) draw3D(screen *ebiten.Image, env *Enviroment) {
 	rayDirX1 := player.dirX + player.planeX
 	rayDirY1 := player.dirY + player.planeY
 
-	for y := 0; y < sheight/2; y++ {
-		rowDist := ((float64(sheight) / 2) / (float64(sheight)/2 - float64(y)))
+	for y := 0; y < sheight; y++ {
+		isFloor := y > sheight/2+int(player.pitch)
+
+		p := float64(sheight)/2 - float64(y) + player.pitch
+		if isFloor {
+			p = float64(y) - float64(sheight)/2 - player.pitch
+		}
+
+		camZ := (float64(sheight) / 2) - player.posZ
+		if isFloor {
+			camZ = (float64(sheight) / 2) + player.posZ
+		}
+
+		rowDist := camZ / p
 
 		floorStepX := rowDist * (rayDirX1 - rayDirX0) / float64(swidth)
 		floorStepY := rowDist * (rayDirY1 - rayDirY0) / float64(swidth)
@@ -242,9 +185,12 @@ func (player *Player) draw3D(screen *ebiten.Image, env *Enviroment) {
 			floorY += floorStepY
 
 			color := env.textures[6].At(tx, ty)
+			if isFloor {
+				color = env.textures[3].At(tx, ty)
+			}
 			screen.Set(x, y, color)
-			color = env.textures[3].At(tx, ty)
-			screen.Set(x, sheight-y-1, color)
+
+			//screen.Set(x, sheight-y-1, color)
 		}
 	}
 
@@ -257,8 +203,10 @@ func (player *Player) draw3D(screen *ebiten.Image, env *Enviroment) {
 			}
 			if height != 0 {
 				imgx := int(ray.texIndex * float64(env.textures[ray.texture-1].Bounds().Max.X))
-				for y := int(math.Max(float64(sheight-height)/2, 0)); y < int(math.Min(float64((sheight-height)/2+height), float64(sheight))); y++ {
-					imgy := int((float64(y-(sheight-height)/2) / float64(height)) * float64(env.textures[1].Bounds().Max.Y))
+				start := int(math.Max(float64(sheight-height)/2+player.pitch+player.posZ/ray.length, 0))
+				end := int(math.Min(float64((sheight-height)/2+height)+player.pitch+player.posZ/ray.length, float64(sheight)))
+				for y := start; y < end; y++ {
+					imgy := int(((float64(y-(sheight-height)/2) - player.pitch - player.posZ/ray.length) / float64(height)) * float64(env.textures[1].Bounds().Max.Y))
 					screen.Set(x, y, env.textures[ray.texture-1].At(imgx, imgy))
 				}
 			}
@@ -266,6 +214,7 @@ func (player *Player) draw3D(screen *ebiten.Image, env *Enviroment) {
 
 	}
 
+	//Draw the sprites
 	for i, sprite := range env.sprites {
 		env.sprites[i].distance = math.Pow(player.posX-sprite.posX, 2) + math.Pow(player.posY-sprite.posY, 2)
 	}
@@ -287,8 +236,10 @@ func (player *Player) draw3D(screen *ebiten.Image, env *Enviroment) {
 		for x := int(math.Max(float64(screenX-spriteSize/2), 0)); x < int(math.Min(float64(screenX+spriteSize/2), float64(swidth-1))); x++ {
 			imgx := int((float64(x-(screenX-spriteSize/2)) / float64(spriteSize)) * float64(env.textures[sprite.texture].Bounds().Max.X))
 			if player.rays[x].length > transformY && transformY > 0 {
-				for y := int(math.Max(float64((sheight-spriteSize)/2), 0)); y < int(math.Min(float64((sheight-spriteSize)/2+spriteSize), float64(sheight))); y++ {
-					imgy := int((float64(y-(sheight-spriteSize)/2) / float64(spriteSize)) * float64(env.textures[sprite.texture].Bounds().Max.Y))
+				start := int(math.Max(float64((sheight-spriteSize)/2)+player.pitch+player.posZ/transformY, 0))
+				end := int(math.Min(float64((sheight-spriteSize)/2+spriteSize)+player.pitch+player.posZ/transformY, float64(sheight)))
+				for y := start; y < end; y++ {
+					imgy := int(((float64(y-(sheight-spriteSize)/2) - player.pitch - player.posZ/transformY) / float64(spriteSize)) * float64(env.textures[sprite.texture].Bounds().Max.Y))
 					r, g, b, a := env.textures[sprite.texture].At(imgx, imgy).RGBA()
 					if a != 0 {
 						screen.Set(x, y, color.RGBA{uint8(r), uint8(g), uint8(b), uint8(a)})
@@ -315,6 +266,86 @@ func (player *Player) draw2D(screen *ebiten.Image) {
 	ebitenutil.DrawLine(screen, player.posX*cellsizex, player.posY*cellsizey, (player.posX+rayDirX0)*cellsizex, (player.posY+rayDirY0)*cellsizey, color.RGBA{0, 255, 255, 255})
 	ebitenutil.DrawLine(screen, player.posX*cellsizex, player.posY*cellsizey, (player.posX+rayDirX1)*cellsizex, (player.posY+rayDirY1)*cellsizey, color.RGBA{0, 255, 255, 255})
 	ebitenutil.DrawLine(screen, player.posX*cellsizex, player.posY*cellsizey, (player.posX+player.dirX)*cellsizex, (player.posY+player.dirY)*cellsizey, color.RGBA{255, 0, 255, 255})
+}
+
+func (player *Player) handleInput() {
+	if ebiten.IsKeyPressed(ebiten.KeyW) {
+		nextX := player.posX + player.dirX*player.walkSpeed
+		nextY := player.posY + player.dirY*player.walkSpeed
+		var goX bool
+		var goY bool
+		if round(nextX) == round(player.posX) {
+			goX = true
+		} else if nextX > 0 && nextX < float64(env.cellsx) {
+			if env.cells[int(player.posY)][int(nextX)] == 0 {
+				goX = true
+			}
+		} else if nextX > 0 && nextX < float64(env.cellsx) {
+			goX = true
+		}
+		if round(nextY) == round(player.posY) {
+			goY = true
+		} else if nextY > 0 && nextY < float64(env.cellsy) {
+			if env.cells[int(nextY)][int(player.posX)] == 0 {
+				goY = true
+			}
+		} else if nextY > 0 && nextY < float64(env.cellsy) {
+			goY = true
+		}
+		if goX {
+			player.posX += player.dirX * player.walkSpeed
+		}
+		if goY {
+			player.posY += player.dirY * player.walkSpeed
+		}
+	}
+	if ebiten.IsKeyPressed(ebiten.KeyS) {
+		nextX := player.posX - player.dirX*player.walkSpeed
+		nextY := player.posY - player.dirY*player.walkSpeed
+		var goX bool
+		var goY bool
+		if round(nextX) == round(player.posX) {
+			goX = true
+		} else if nextX > 0 && nextX < float64(env.cellsx) {
+			if env.cells[int(player.posY)][int(nextX)] == 0 {
+				goX = true
+			}
+		} else if nextX > 0 && nextX < float64(env.cellsx) {
+			goX = true
+		}
+		if round(nextY) == round(player.posY) {
+			goY = true
+		} else if nextY > 0 && nextY < float64(env.cellsy) {
+			if env.cells[int(nextY)][int(player.posX)] == 0 {
+				goY = true
+			}
+		} else if nextY > 0 && nextY < float64(env.cellsy) {
+			goY = true
+		}
+		if goX {
+			player.posX -= player.dirX * player.walkSpeed
+		}
+		if goY {
+			player.posY -= player.dirY * player.walkSpeed
+		}
+	}
+	if ebiten.IsKeyPressed(ebiten.KeyA) {
+		player.dirX, player.dirY = rotate(player.dirX, player.dirY, -0.02)
+		player.planeX, player.planeY = rotate(player.planeX, player.planeY, -0.02)
+	}
+	if ebiten.IsKeyPressed(ebiten.KeyD) {
+		player.dirX, player.dirY = rotate(player.dirX, player.dirY, 0.02)
+		player.planeX, player.planeY = rotate(player.planeX, player.planeY, 0.02)
+	}
+	if ebiten.IsKeyPressed(ebiten.KeyUp) {
+		player.pitch = math.Min(player.pitch+player.walkSpeed*100, 200)
+	}
+	if ebiten.IsKeyPressed(ebiten.KeyDown) {
+		player.pitch = math.Max(player.pitch-player.walkSpeed*100, -200)
+	}
+	if ebiten.IsKeyPressed(ebiten.KeySpace) && player.posZ == 0 {
+		player.velZ = 15
+	}
 }
 
 func round(number float64) int {
