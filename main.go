@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"math"
 
 	"github.com/hajimehoshi/ebiten"
 )
@@ -29,16 +30,15 @@ func (g *Game) Draw(screen *ebiten.Image) {
 
 //Layout returns the size of the canvas
 func (g *Game) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeight int) {
-	return 500, 500
+	return 255, 255
 }
 
 func main() {
 	player = Player{}
-	player.init(500/500, 10.01, 10.01, 0)
+	player.init(22.5, 10.5, -math.Pi/2)
 
 	env = Enviroment{}
-	env.init(20, 20)
-	env.cells = Level01
+	env.init(Level01)
 
 	ebiten.SetWindowSize(500, 500)
 	ebiten.SetWindowTitle("Raycasting")

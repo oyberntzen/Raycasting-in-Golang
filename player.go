@@ -3,6 +3,7 @@ package main
 import (
 	"image/color"
 	"math"
+	"sort"
 
 	"github.com/hajimehoshi/ebiten/ebitenutil"
 
@@ -18,7 +19,7 @@ type Player struct {
 	planeX float64
 	planeY float64
 
-	rays [][2]float64
+	rays []Ray
 
 	maxDist   int
 	walkSpeed float64
@@ -27,15 +28,12 @@ type Player struct {
 	intersection [2]float64
 }
 
-func (player *Player) init(ratio float64, x float64, y float64, angle float64) {
+func (player *Player) init(x float64, y float64, angle float64) {
 	player.posX = x
 	player.posY = y
 
-	player.dirX = math.Cos(angle)
-	player.dirY = math.Sin(angle)
-
-	player.planeX = 0
-	player.planeY = 0.5
+	player.dirX, player.dirY = rotate(1, 0, angle)
+	player.planeX, player.planeY = rotate(0, 0.5, angle)
 
 	player.maxDist = 20
 	player.walkSpeed = 0.03
@@ -110,29 +108,19 @@ func (player *Player) update(screen *ebiten.Image, env *Enviroment, start bool) 
 	if ebiten.IsKeyPressed(ebiten.KeyA) {
 		changed = true
 
-		oldDirX := player.dirX
-		player.dirX = player.dirX*math.Cos(-0.02) - player.dirY*math.Sin(-0.02)
-		player.dirY = player.dirY*math.Cos(-0.02) + oldDirX*math.Sin(-0.02)
-
-		oldPlaneX := player.planeX
-		player.planeX = player.planeX*math.Cos(-0.02) - player.planeY*math.Sin(-0.02)
-		player.planeY = player.planeY*math.Cos(-0.02) + oldPlaneX*math.Sin(-0.02)
+		player.dirX, player.dirY = rotate(player.dirX, player.dirY, -0.02)
+		player.planeX, player.planeY = rotate(player.planeX, player.planeY, -0.02)
 	}
 	if ebiten.IsKeyPressed(ebiten.KeyD) {
 		changed = true
 
-		oldDirX := player.dirX
-		player.dirX = player.dirX*math.Cos(0.02) - player.dirY*math.Sin(0.02)
-		player.dirY = player.dirY*math.Cos(0.02) + oldDirX*math.Sin(0.02)
-
-		oldPlaneX := player.planeX
-		player.planeX = player.planeX*math.Cos(0.02) - player.planeY*math.Sin(0.02)
-		player.planeY = player.planeY*math.Cos(0.02) + oldPlaneX*math.Sin(0.02)
+		player.dirX, player.dirY = rotate(player.dirX, player.dirY, 0.02)
+		player.planeX, player.planeY = rotate(player.planeX, player.planeY, 0.02)
 	}
 
 	if changed || start {
-		player.frontRay = player.ray(env, 0)[0]
-		player.rays = [][2]float64{}
+		player.frontRay = player.ray(env, 0).length
+		player.rays = []Ray{}
 		width := screen.Bounds().Max.X
 		for x := 0; x < width; x++ {
 			cameraX := (float64(x)/float64(width))*2 - 1
@@ -142,7 +130,7 @@ func (player *Player) update(screen *ebiten.Image, env *Enviroment, start bool) 
 	}
 }
 
-func (player *Player) ray(env *Enviroment, cameraX float64) [2]float64 {
+func (player *Player) ray(env *Enviroment, cameraX float64) Ray {
 	dist := float64(0)
 
 	rayDirX := player.dirX + player.planeX*cameraX
@@ -214,13 +202,13 @@ func (player *Player) ray(env *Enviroment, cameraX float64) [2]float64 {
 
 		if curcell[0] < 0 || curcell[0] >= env.cellsx ||
 			curcell[1] < 0 || curcell[1] >= env.cellsy {
-			return [2]float64{realDist, textureIndex}
+			return Ray{realDist, textureIndex, env.cells[curcell[1]][curcell[0]]}
 		}
 		if env.cells[curcell[1]][curcell[0]] != 0 {
-			return [2]float64{realDist, textureIndex}
+			return Ray{realDist, textureIndex, env.cells[curcell[1]][curcell[0]]}
 		}
 	}
-	return [2]float64{float64(player.maxDist), 0}
+	return Ray{float64(player.maxDist), 0, 0}
 }
 
 func (player *Player) draw3D(screen *ebiten.Image, env *Enviroment) {
@@ -253,24 +241,62 @@ func (player *Player) draw3D(screen *ebiten.Image, env *Enviroment) {
 			floorX += floorStepX
 			floorY += floorStepY
 
-			color := env.textures[0].At(tx, ty)
+			color := env.textures[6].At(tx, ty)
 			screen.Set(x, y, color)
+			color = env.textures[3].At(tx, ty)
 			screen.Set(x, sheight-y-1, color)
 		}
 	}
 
 	//Draw the walls
 	for x, ray := range player.rays {
-		height := 0
-		if ray[0] != 0 {
-			height = int(float64(sheight) / ray[0])
-		}
-		if height != 0 {
-			imgx := int(ray[1] * float64(env.textures[1].Bounds().Max.X))
-			for y := int(math.Max(float64(sheight-height)/2, 0)); y < int(math.Min(float64((sheight-height)/2+height), float64(sheight))); y++ {
-				imgy := int((float64(y-(sheight-height)/2) / float64(height)) * float64(env.textures[1].Bounds().Max.Y))
-				screen.Set(x, y, env.textures[1].At(imgx, imgy))
+		if ray.texIndex != 0 {
+			height := 0
+			if ray.length != 0 {
+				height = int(float64(sheight) / ray.length)
 			}
+			if height != 0 {
+				imgx := int(ray.texIndex * float64(env.textures[ray.texture-1].Bounds().Max.X))
+				for y := int(math.Max(float64(sheight-height)/2, 0)); y < int(math.Min(float64((sheight-height)/2+height), float64(sheight))); y++ {
+					imgy := int((float64(y-(sheight-height)/2) / float64(height)) * float64(env.textures[1].Bounds().Max.Y))
+					screen.Set(x, y, env.textures[ray.texture-1].At(imgx, imgy))
+				}
+			}
+		}
+
+	}
+
+	for i, sprite := range env.sprites {
+		env.sprites[i].distance = math.Pow(player.posX-sprite.posX, 2) + math.Pow(player.posY-sprite.posY, 2)
+	}
+	sort.SliceStable(env.sprites, func(i, j int) bool {
+		return env.sprites[i].distance > env.sprites[j].distance
+	})
+	for _, sprite := range env.sprites {
+		relX := sprite.posX - player.posX
+		relY := sprite.posY - player.posY
+
+		invDet := 1 / (player.planeX*player.dirY - player.dirX*player.planeY)
+
+		transformX := invDet * (player.dirY*relX - player.dirX*relY)
+		transformY := invDet * (-player.planeY*relX + player.planeX*relY)
+
+		screenX := int((float64(swidth) / 2) * (1 + transformX/transformY))
+		spriteSize := int(math.Abs(float64(sheight) / transformY))
+
+		for x := int(math.Max(float64(screenX-spriteSize/2), 0)); x < int(math.Min(float64(screenX+spriteSize/2), float64(swidth-1))); x++ {
+			imgx := int((float64(x-(screenX-spriteSize/2)) / float64(spriteSize)) * float64(env.textures[sprite.texture].Bounds().Max.X))
+			if player.rays[x].length > transformY && transformY > 0 {
+				for y := int(math.Max(float64((sheight-spriteSize)/2), 0)); y < int(math.Min(float64((sheight-spriteSize)/2+spriteSize), float64(sheight))); y++ {
+					imgy := int((float64(y-(sheight-spriteSize)/2) / float64(spriteSize)) * float64(env.textures[sprite.texture].Bounds().Max.Y))
+					r, g, b, a := env.textures[sprite.texture].At(imgx, imgy).RGBA()
+					if a != 0 {
+						screen.Set(x, y, color.RGBA{uint8(r), uint8(g), uint8(b), uint8(a)})
+					}
+					//fmt.Println(col)
+				}
+			}
+
 		}
 	}
 }
@@ -296,4 +322,15 @@ func round(number float64) int {
 		number--
 	}
 	return int(number)
+}
+
+func rotate(x, y, a float64) (float64, float64) {
+	return x*math.Cos(a) - y*math.Sin(a), y*math.Cos(a) + x*math.Sin(a)
+}
+
+//Ray is a struct for rays
+type Ray struct {
+	length   float64
+	texIndex float64
+	texture  int
 }
