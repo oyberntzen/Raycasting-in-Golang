@@ -29,6 +29,11 @@ type Player struct {
 	walkSpeed float64
 
 	frontRay float64
+
+	cursorX int
+	cursorY int
+	initX   int
+	initY   int
 }
 
 func (player *Player) init(x float64, y float64, angle float64) {
@@ -43,12 +48,14 @@ func (player *Player) init(x float64, y float64, angle float64) {
 
 	player.pitch = 0
 	player.posZ = 0
+
+	player.cursorX, player.cursorY = ebiten.CursorPosition()
 }
 
 func (player *Player) update(screen *ebiten.Image, env *Enviroment) {
-	player.handleInput()
+	player.handleInput(screen)
 
-	player.velZ -= 1
+	player.velZ--
 	player.posZ = math.Max(player.posZ+player.velZ, 0)
 
 	player.frontRay = player.ray(env, 0).length
@@ -268,84 +275,81 @@ func (player *Player) draw2D(screen *ebiten.Image) {
 	ebitenutil.DrawLine(screen, player.posX*cellsizex, player.posY*cellsizey, (player.posX+player.dirX)*cellsizex, (player.posY+player.dirY)*cellsizey, color.RGBA{255, 0, 255, 255})
 }
 
-func (player *Player) handleInput() {
+func (player *Player) handleInput(screen *ebiten.Image) {
+	nextX, nextY := 0.0, 0.0
 	if ebiten.IsKeyPressed(ebiten.KeyW) {
-		nextX := player.posX + player.dirX*player.walkSpeed
-		nextY := player.posY + player.dirY*player.walkSpeed
-		var goX bool
-		var goY bool
-		if round(nextX) == round(player.posX) {
-			goX = true
-		} else if nextX > 0 && nextX < float64(env.cellsx) {
-			if env.cells[int(player.posY)][int(nextX)] == 0 {
-				goX = true
-			}
-		} else if nextX > 0 && nextX < float64(env.cellsx) {
-			goX = true
-		}
-		if round(nextY) == round(player.posY) {
-			goY = true
-		} else if nextY > 0 && nextY < float64(env.cellsy) {
-			if env.cells[int(nextY)][int(player.posX)] == 0 {
-				goY = true
-			}
-		} else if nextY > 0 && nextY < float64(env.cellsy) {
-			goY = true
-		}
-		if goX {
-			player.posX += player.dirX * player.walkSpeed
-		}
-		if goY {
-			player.posY += player.dirY * player.walkSpeed
-		}
+		nextX += player.dirX
+		nextY += player.dirY
+
 	}
 	if ebiten.IsKeyPressed(ebiten.KeyS) {
-		nextX := player.posX - player.dirX*player.walkSpeed
-		nextY := player.posY - player.dirY*player.walkSpeed
-		var goX bool
-		var goY bool
-		if round(nextX) == round(player.posX) {
-			goX = true
-		} else if nextX > 0 && nextX < float64(env.cellsx) {
-			if env.cells[int(player.posY)][int(nextX)] == 0 {
-				goX = true
-			}
-		} else if nextX > 0 && nextX < float64(env.cellsx) {
-			goX = true
-		}
-		if round(nextY) == round(player.posY) {
-			goY = true
-		} else if nextY > 0 && nextY < float64(env.cellsy) {
-			if env.cells[int(nextY)][int(player.posX)] == 0 {
-				goY = true
-			}
-		} else if nextY > 0 && nextY < float64(env.cellsy) {
-			goY = true
-		}
-		if goX {
-			player.posX -= player.dirX * player.walkSpeed
-		}
-		if goY {
-			player.posY -= player.dirY * player.walkSpeed
-		}
+		nextX -= player.dirX
+		nextY -= player.dirY
+
 	}
 	if ebiten.IsKeyPressed(ebiten.KeyA) {
-		player.dirX, player.dirY = rotate(player.dirX, player.dirY, -0.02)
-		player.planeX, player.planeY = rotate(player.planeX, player.planeY, -0.02)
+		dirX, dirY := rotate(player.dirX, player.dirY, -math.Pi/2)
+		nextX += dirX
+		nextY += dirY
 	}
 	if ebiten.IsKeyPressed(ebiten.KeyD) {
-		player.dirX, player.dirY = rotate(player.dirX, player.dirY, 0.02)
-		player.planeX, player.planeY = rotate(player.planeX, player.planeY, 0.02)
+		dirX, dirY := rotate(player.dirX, player.dirY, math.Pi/2)
+		nextX += dirX
+		nextY += dirY
+
 	}
-	if ebiten.IsKeyPressed(ebiten.KeyUp) {
-		player.pitch = math.Min(player.pitch+player.walkSpeed*100, 200)
+	angle := math.Atan2(nextY, nextX)
+	if nextX != 0 {
+		nextX = math.Cos(angle)
 	}
-	if ebiten.IsKeyPressed(ebiten.KeyDown) {
-		player.pitch = math.Max(player.pitch-player.walkSpeed*100, -200)
+	if nextY != 0 {
+		nextY = math.Sin(angle)
+	}
+	//nextX, nextY = math.Cos(angle), math.Sin(angle)
+	goX, goY := player.collision(player.posX+nextX*player.walkSpeed, player.posY+nextY*player.walkSpeed)
+	if goX {
+		player.posX += nextX * player.walkSpeed
+	}
+	if goY {
+		player.posY += nextY * player.walkSpeed
 	}
 	if ebiten.IsKeyPressed(ebiten.KeySpace) && player.posZ == 0 {
 		player.velZ = 15
 	}
+	newCursorX, newCursorY := ebiten.CursorPosition()
+	changeX := newCursorX - player.cursorX
+	changeY := newCursorY - player.cursorY
+	if changeX > -1000 && changeX < 1000 {
+		player.dirX, player.dirY = rotate(player.dirX, player.dirY, float64(changeX)/100)
+		player.planeX, player.planeY = rotate(player.planeX, player.planeY, float64(changeX)/100)
+		player.pitch = math.Max(math.Min(player.pitch-float64(changeY), 200), -200)
+	}
+	player.cursorX, player.cursorY = newCursorX, newCursorY
+}
+
+func (player *Player) collision(nextX, nextY float64) (bool, bool) {
+	var goX bool
+	var goY bool
+	if round(nextX) == round(player.posX) {
+		goX = true
+	} else if nextX > 0 && nextX < float64(env.cellsx) {
+		if env.cells[int(player.posY)][int(nextX)] == 0 {
+			goX = true
+		}
+	} else if nextX > 0 && nextX < float64(env.cellsx) {
+		goX = true
+	}
+	if round(nextY) == round(player.posY) {
+		goY = true
+	} else if nextY > 0 && nextY < float64(env.cellsy) {
+		if env.cells[int(nextY)][int(player.posX)] == 0 {
+			goY = true
+		}
+	} else if nextY > 0 && nextY < float64(env.cellsy) {
+		goY = true
+	}
+
+	return goX, goY
 }
 
 func round(number float64) int {

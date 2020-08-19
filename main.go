@@ -13,9 +13,19 @@ var env Enviroment
 //Game is the struct that implements ebiten.Game
 type Game struct{}
 
+//Exit implements error interface
+type Exit struct{}
+
+func (e *Exit) Error() string {
+	return "Exit game"
+}
+
 //Update handles the logic. 60fps
 func (g *Game) Update(screen *ebiten.Image) error {
 	player.update(screen, &env)
+	if ebiten.IsKeyPressed(ebiten.KeyEscape) {
+		return &Exit{}
+	}
 	return nil
 }
 
@@ -40,6 +50,7 @@ func main() {
 
 	ebiten.SetWindowSize(500, 500)
 	ebiten.SetWindowTitle("Raycasting")
+	ebiten.SetCursorMode(ebiten.CursorModeCaptured)
 	//ebiten.SetFullscreen(true)
 	if err := ebiten.RunGame(&Game{}); err != nil {
 		log.Fatal(err)
