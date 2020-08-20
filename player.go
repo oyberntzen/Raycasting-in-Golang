@@ -25,47 +25,58 @@ type Player struct {
 
 	rays []Ray
 
-	maxDist   int
+	maxDist int
+
 	walkSpeed float64
+	rotXSpeed float64
+	rotYSpeed float64
 
 	frontRay float64
 
-	cursorX int
-	cursorY int
-	initX   int
-	initY   int
+	cursorX float64
+	cursorY float64
+
+	screenWidth  int
+	screenHeight int
+
+	size float64
 }
 
-func (player *Player) init(x float64, y float64, angle float64) {
+func (player *Player) init(x float64, y float64, angle float64, screenWidth int, screenHeight int) {
 	player.posX = x
 	player.posY = y
+	player.screenWidth = screenWidth
+	player.screenHeight = screenHeight
 
 	player.dirX, player.dirY = rotate(1, 0, angle)
-	player.planeX, player.planeY = rotate(0, 0.5, angle)
+	player.planeX, player.planeY = rotate(0, 0.5*(float64(player.screenWidth)/float64(player.screenHeight)), angle)
 
 	player.maxDist = 20
-	player.walkSpeed = 0.03
+
+	player.walkSpeed = 0.05
+	sensitivity := 1.0
+	player.rotXSpeed = 1.5 * sensitivity
+	player.rotYSpeed = 2.5 * sensitivity
 
 	player.pitch = 0
 	player.posZ = 0
 
-	player.cursorX, player.cursorY = ebiten.CursorPosition()
+	cursorX, cursorY := ebiten.CursorPosition()
+	player.cursorX = float64(cursorX)
+	player.cursorY = float64(cursorY)
+
+	player.size = 0.1
+
 }
 
 func (player *Player) update(screen *ebiten.Image, env *Enviroment) {
-	player.handleInput(screen)
+	player.handleInput(screen, env)
 
-	player.velZ--
-	player.posZ = math.Max(player.posZ+player.velZ, 0)
+	player.velZ -= 0.003
+	player.posZ = math.Min(math.Max(player.posZ+player.velZ, 0), float64(player.screenHeight)*0.001)
 
 	player.frontRay = player.ray(env, 0).length
-	player.rays = []Ray{}
-	width := screen.Bounds().Max.X
-	for x := 0; x < width; x++ {
-		cameraX := (float64(x)/float64(width))*2 - 1
-		ray := player.ray(env, cameraX)
-		player.rays = append(player.rays, ray)
-	}
+
 }
 
 func (player *Player) ray(env *Enviroment, cameraX float64) Ray {
@@ -150,38 +161,51 @@ func (player *Player) ray(env *Enviroment, cameraX float64) Ray {
 }
 
 func (player *Player) draw3D(screen *ebiten.Image, env *Enviroment) {
-	//Draw the floor and ceiling
+	player.rayCast(screen, env)
+	player.drawFloorCeiling(screen, env)
+	player.drawWalls(screen, env)
+	player.drawSprites(screen, env)
+
+}
+
+func (player *Player) rayCast(screen *ebiten.Image, env *Enviroment) {
+	player.rays = []Ray{}
+	for x := 0; x < player.screenWidth; x++ {
+		cameraX := (float64(x)/float64(player.screenWidth))*2 - 1
+		ray := player.ray(env, cameraX)
+		player.rays = append(player.rays, ray)
+	}
+}
+
+func (player *Player) drawFloorCeiling(screen *ebiten.Image, env *Enviroment) {
 	twidth := env.textures[0].Bounds().Max.X
 	theight := env.textures[0].Bounds().Max.Y
-	swidth := screen.Bounds().Max.X
-	sheight := screen.Bounds().Max.Y
 	rayDirX0 := player.dirX - player.planeX
 	rayDirY0 := player.dirY - player.planeY
 	rayDirX1 := player.dirX + player.planeX
 	rayDirY1 := player.dirY + player.planeY
 
-	for y := 0; y < sheight; y++ {
-		isFloor := y > sheight/2+int(player.pitch)
+	for y := 0; y < player.screenHeight; y++ {
+		isFloor := y > player.screenHeight/2+int(player.pitch)
 
-		p := float64(sheight)/2 - float64(y) + player.pitch
+		p := float64(player.screenHeight)/2 - float64(y) + player.pitch
 		if isFloor {
-			p = float64(y) - float64(sheight)/2 - player.pitch
+			p = float64(y) - float64(player.screenHeight)/2 - player.pitch
 		}
 
-		camZ := (float64(sheight) / 2) - player.posZ
+		camZ := (float64(player.screenHeight) / 2) - player.posZ*float64(player.screenHeight)
 		if isFloor {
-			camZ = (float64(sheight) / 2) + player.posZ
+			camZ = (float64(player.screenHeight) / 2) + player.posZ*float64(player.screenHeight)
 		}
-
 		rowDist := camZ / p
 
-		floorStepX := rowDist * (rayDirX1 - rayDirX0) / float64(swidth)
-		floorStepY := rowDist * (rayDirY1 - rayDirY0) / float64(swidth)
+		floorStepX := rowDist * (rayDirX1 - rayDirX0) / float64(player.screenWidth)
+		floorStepY := rowDist * (rayDirY1 - rayDirY0) / float64(player.screenWidth)
 
 		floorX := player.posX + rowDist*rayDirX0
 		floorY := player.posY + rowDist*rayDirY0
 
-		for x := 0; x < swidth; x++ {
+		for x := 0; x < player.screenWidth; x++ {
 			cellX := int(floorX)
 			cellY := int(floorY)
 
@@ -196,32 +220,32 @@ func (player *Player) draw3D(screen *ebiten.Image, env *Enviroment) {
 				color = env.textures[3].At(tx, ty)
 			}
 			screen.Set(x, y, color)
-
-			//screen.Set(x, sheight-y-1, color)
 		}
 	}
+}
 
-	//Draw the walls
+func (player *Player) drawWalls(screen *ebiten.Image, env *Enviroment) {
 	for x, ray := range player.rays {
 		if ray.texIndex != 0 {
 			height := 0
 			if ray.length != 0 {
-				height = int(float64(sheight) / ray.length)
+				height = int(float64(player.screenHeight) / ray.length)
 			}
 			if height != 0 {
 				imgx := int(ray.texIndex * float64(env.textures[ray.texture-1].Bounds().Max.X))
-				start := int(math.Max(float64(sheight-height)/2+player.pitch+player.posZ/ray.length, 0))
-				end := int(math.Min(float64((sheight-height)/2+height)+player.pitch+player.posZ/ray.length, float64(sheight)))
+				start := int(math.Max(float64(player.screenHeight-height)/2+player.pitch+player.posZ*float64(player.screenHeight)/ray.length, 0))
+				end := int(math.Min(float64((player.screenHeight-height)/2+height)+player.pitch+player.posZ*float64(player.screenHeight)/ray.length, float64(player.screenHeight)))
 				for y := start; y < end; y++ {
-					imgy := int(((float64(y-(sheight-height)/2) - player.pitch - player.posZ/ray.length) / float64(height)) * float64(env.textures[1].Bounds().Max.Y))
+					imgy := int(((float64(y-(player.screenHeight-height)/2) - player.pitch - player.posZ*float64(player.screenHeight)/ray.length) / float64(height)) * float64(env.textures[1].Bounds().Max.Y))
 					screen.Set(x, y, env.textures[ray.texture-1].At(imgx, imgy))
 				}
 			}
 		}
 
 	}
+}
 
-	//Draw the sprites
+func (player *Player) drawSprites(screen *ebiten.Image, env *Enviroment) {
 	for i, sprite := range env.sprites {
 		env.sprites[i].distance = math.Pow(player.posX-sprite.posX, 2) + math.Pow(player.posY-sprite.posY, 2)
 	}
@@ -237,21 +261,20 @@ func (player *Player) draw3D(screen *ebiten.Image, env *Enviroment) {
 		transformX := invDet * (player.dirY*relX - player.dirX*relY)
 		transformY := invDet * (-player.planeY*relX + player.planeX*relY)
 
-		screenX := int((float64(swidth) / 2) * (1 + transformX/transformY))
-		spriteSize := int(math.Abs(float64(sheight) / transformY))
+		screenX := int((float64(player.screenWidth) / 2) * (1 + transformX/transformY))
+		spriteSize := int(math.Abs(float64(player.screenHeight) / transformY))
 
-		for x := int(math.Max(float64(screenX-spriteSize/2), 0)); x < int(math.Min(float64(screenX+spriteSize/2), float64(swidth-1))); x++ {
+		for x := int(math.Max(float64(screenX-spriteSize/2), 0)); x < int(math.Min(float64(screenX+spriteSize/2), float64(player.screenWidth-1))); x++ {
 			imgx := int((float64(x-(screenX-spriteSize/2)) / float64(spriteSize)) * float64(env.textures[sprite.texture].Bounds().Max.X))
 			if player.rays[x].length > transformY && transformY > 0 {
-				start := int(math.Max(float64((sheight-spriteSize)/2)+player.pitch+player.posZ/transformY, 0))
-				end := int(math.Min(float64((sheight-spriteSize)/2+spriteSize)+player.pitch+player.posZ/transformY, float64(sheight)))
+				start := int(math.Max(float64((player.screenHeight-spriteSize)/2)+player.pitch+player.posZ*float64(player.screenHeight)/transformY, 0))
+				end := int(math.Min(float64((player.screenHeight-spriteSize)/2+spriteSize)+player.pitch+player.posZ*float64(player.screenHeight)/transformY, float64(player.screenHeight)))
 				for y := start; y < end; y++ {
-					imgy := int(((float64(y-(sheight-spriteSize)/2) - player.pitch - player.posZ/transformY) / float64(spriteSize)) * float64(env.textures[sprite.texture].Bounds().Max.Y))
+					imgy := int(((float64(y-(player.screenHeight-spriteSize)/2) - player.pitch - player.posZ*float64(player.screenHeight)/transformY) / float64(spriteSize)) * float64(env.textures[sprite.texture].Bounds().Max.Y))
 					r, g, b, a := env.textures[sprite.texture].At(imgx, imgy).RGBA()
 					if a != 0 {
 						screen.Set(x, y, color.RGBA{uint8(r), uint8(g), uint8(b), uint8(a)})
 					}
-					//fmt.Println(col)
 				}
 			}
 
@@ -259,7 +282,7 @@ func (player *Player) draw3D(screen *ebiten.Image, env *Enviroment) {
 	}
 }
 
-func (player *Player) draw2D(screen *ebiten.Image) {
+func (player *Player) draw2D(screen *ebiten.Image, env *Enviroment) {
 	cellsizex := float64(screen.Bounds().Max.X / env.cellsx)
 	cellsizey := float64(screen.Bounds().Max.Y / env.cellsy)
 	ebitenutil.DrawRect(screen, player.posX*cellsizex-5, player.posY*cellsizey-5, 10, 10, color.RGBA{255, 255, 255, 255})
@@ -275,7 +298,7 @@ func (player *Player) draw2D(screen *ebiten.Image) {
 	ebitenutil.DrawLine(screen, player.posX*cellsizex, player.posY*cellsizey, (player.posX+player.dirX)*cellsizex, (player.posY+player.dirY)*cellsizey, color.RGBA{255, 0, 255, 255})
 }
 
-func (player *Player) handleInput(screen *ebiten.Image) {
+func (player *Player) handleInput(screen *ebiten.Image, env *Enviroment) {
 	nextX, nextY := 0.0, 0.0
 	if ebiten.IsKeyPressed(ebiten.KeyW) {
 		nextX += player.dirX
@@ -306,7 +329,7 @@ func (player *Player) handleInput(screen *ebiten.Image) {
 		nextY = math.Sin(angle)
 	}
 	//nextX, nextY = math.Cos(angle), math.Sin(angle)
-	goX, goY := player.collision(player.posX+nextX*player.walkSpeed, player.posY+nextY*player.walkSpeed)
+	goX, goY := player.collision(env, player.posX+nextX*player.walkSpeed, player.posY+nextY*player.walkSpeed)
 	if goX {
 		player.posX += nextX * player.walkSpeed
 	}
@@ -314,42 +337,51 @@ func (player *Player) handleInput(screen *ebiten.Image) {
 		player.posY += nextY * player.walkSpeed
 	}
 	if ebiten.IsKeyPressed(ebiten.KeySpace) && player.posZ == 0 {
-		player.velZ = 15
+		player.velZ = 0.045
 	}
-	newCursorX, newCursorY := ebiten.CursorPosition()
-	changeX := newCursorX - player.cursorX
-	changeY := newCursorY - player.cursorY
+	cursorX, cursorY := ebiten.CursorPosition()
+	newCursorX := float64(cursorX)
+	newCursorY := float64(cursorY)
+
+	changeX := (newCursorX - player.cursorX) / float64(player.screenWidth)
+	changeY := (newCursorY - player.cursorY)
+
 	if changeX > -1000 && changeX < 1000 {
-		player.dirX, player.dirY = rotate(player.dirX, player.dirY, float64(changeX)/100)
-		player.planeX, player.planeY = rotate(player.planeX, player.planeY, float64(changeX)/100)
-		player.pitch = math.Max(math.Min(player.pitch-float64(changeY), 200), -200)
+		player.dirX, player.dirY = rotate(player.dirX, player.dirY, changeX*player.rotYSpeed)
+		player.planeX, player.planeY = rotate(player.planeX, player.planeY, changeX*player.rotYSpeed)
+		player.pitch = math.Max(math.Min(player.pitch-changeY*player.rotXSpeed, float64(player.screenHeight)), float64(-player.screenHeight))
 	}
 	player.cursorX, player.cursorY = newCursorX, newCursorY
 }
 
-func (player *Player) collision(nextX, nextY float64) (bool, bool) {
-	var goX bool
-	var goY bool
-	if round(nextX) == round(player.posX) {
-		goX = true
-	} else if nextX > 0 && nextX < float64(env.cellsx) {
-		if env.cells[int(player.posY)][int(nextX)] == 0 {
-			goX = true
-		}
-	} else if nextX > 0 && nextX < float64(env.cellsx) {
-		goX = true
-	}
-	if round(nextY) == round(player.posY) {
-		goY = true
-	} else if nextY > 0 && nextY < float64(env.cellsy) {
-		if env.cells[int(nextY)][int(player.posX)] == 0 {
-			goY = true
-		}
-	} else if nextY > 0 && nextY < float64(env.cellsy) {
-		goY = true
-	}
+func (player *Player) collision(env *Enviroment, nextX, nextY float64) (bool, bool) {
+	return doCollide(player.posX, nextX+player.size, player.posY+player.size, true, env) &&
+			doCollide(player.posX, nextX+player.size, player.posY-player.size, true, env) &&
+			doCollide(player.posX, nextX-player.size, player.posY+player.size, true, env) &&
+			doCollide(player.posX, nextX-player.size, player.posY-player.size, true, env),
+		doCollide(player.posY, nextY+player.size, player.posX+player.size, false, env) &&
+			doCollide(player.posY, nextY+player.size, player.posX-player.size, false, env) &&
+			doCollide(player.posY, nextY-player.size, player.posX+player.size, false, env) &&
+			doCollide(player.posY, nextY-player.size, player.posX-player.size, false, env)
+}
 
-	return goX, goY
+func doCollide(start, end, other float64, isX bool, env *Enviroment) bool {
+	if round(end) == round(start) {
+		return true
+	} else if end > 0 && end < float64(env.cellsx) {
+		if isX {
+			if env.cells[int(other)][int(end)] == 0 {
+				return true
+			}
+		} else {
+			if env.cells[int(end)][int(other)] == 0 {
+				return true
+			}
+		}
+	} else if end > 0 && end < float64(env.cellsx) {
+		return true
+	}
+	return false
 }
 
 func round(number float64) int {

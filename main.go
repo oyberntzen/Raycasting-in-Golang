@@ -8,7 +8,11 @@ import (
 )
 
 var player Player
-var env Enviroment
+var enviroment Enviroment
+
+const width int = 1920
+const height int = 1080
+const scaleDown int = 3
 
 //Game is the struct that implements ebiten.Game
 type Game struct{}
@@ -22,7 +26,7 @@ func (e *Exit) Error() string {
 
 //Update handles the logic. 60fps
 func (g *Game) Update(screen *ebiten.Image) error {
-	player.update(screen, &env)
+	player.update(screen, &enviroment)
 	if ebiten.IsKeyPressed(ebiten.KeyEscape) {
 		return &Exit{}
 	}
@@ -31,27 +35,27 @@ func (g *Game) Update(screen *ebiten.Image) error {
 
 //Draw handles displaying each frame. 60fps
 func (g *Game) Draw(screen *ebiten.Image) {
-	player.draw3D(screen, &env)
+	player.draw3D(screen, &enviroment)
 	//env.draw2D(screen)
 	//player.draw2D(screen)
 }
 
 //Layout returns the size of the canvas
 func (g *Game) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeight int) {
-	return 255, 255
+	return outsideWidth / scaleDown, outsideHeight / scaleDown
 }
 
 func main() {
 	player = Player{}
-	player.init(22.5, 10.5, -math.Pi/2)
+	player.init(22.5, 10.5, -math.Pi/2, width/scaleDown, height/scaleDown)
 
-	env = Enviroment{}
-	env.init(Level01)
+	enviroment = Enviroment{}
+	enviroment.init(Level01)
 
-	ebiten.SetWindowSize(500, 500)
+	ebiten.SetWindowSize(width, height)
 	ebiten.SetWindowTitle("Raycasting")
 	ebiten.SetCursorMode(ebiten.CursorModeCaptured)
-	//ebiten.SetFullscreen(true)
+	ebiten.SetFullscreen(true)
 	if err := ebiten.RunGame(&Game{}); err != nil {
 		log.Fatal(err)
 	}
