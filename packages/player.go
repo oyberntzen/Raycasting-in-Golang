@@ -1,4 +1,4 @@
-package main
+package packages
 
 import (
 	"image/color"
@@ -42,7 +42,8 @@ type Player struct {
 	size float64
 }
 
-func (player *Player) init(x float64, y float64, angle float64, screenWidth int, screenHeight int) {
+//Init initializes the player with the specified x, y and angle. Width and height of screen is also required for some calculations
+func (player *Player) Init(x float64, y float64, angle float64, screenWidth int, screenHeight int) {
 	player.posX = x
 	player.posY = y
 	player.screenWidth = screenWidth
@@ -69,7 +70,8 @@ func (player *Player) init(x float64, y float64, angle float64, screenWidth int,
 
 }
 
-func (player *Player) update(screen *ebiten.Image, env *Enviroment) {
+//Update updates the player's position based on user input
+func (player *Player) Update(screen *ebiten.Image, env *Enviroment) {
 	player.handleInput(screen, env)
 
 	player.velZ -= 0.003
@@ -160,7 +162,8 @@ func (player *Player) ray(env *Enviroment, cameraX float64) Ray {
 	return Ray{float64(player.maxDist), 0, 0}
 }
 
-func (player *Player) draw3D(screen *ebiten.Image, env *Enviroment) {
+//Draw3D draws walls, floor, ceiling and sprites from the first person view of the player
+func (player *Player) Draw3D(screen *ebiten.Image, env *Enviroment) {
 	player.rayCast(screen, env)
 	player.drawFloorCeiling(screen, env)
 	player.drawWalls(screen, env)
@@ -282,7 +285,8 @@ func (player *Player) drawSprites(screen *ebiten.Image, env *Enviroment) {
 	}
 }
 
-func (player *Player) draw2D(screen *ebiten.Image, env *Enviroment) {
+//Draw2D draws the player's position and direction from top-down view
+func (player *Player) Draw2D(screen *ebiten.Image, env *Enviroment) {
 	cellsizex := float64(screen.Bounds().Max.X / env.cellsx)
 	cellsizey := float64(screen.Bounds().Max.Y / env.cellsy)
 	ebitenutil.DrawRect(screen, player.posX*cellsizex-5, player.posY*cellsizey-5, 10, 10, color.RGBA{255, 255, 255, 255})

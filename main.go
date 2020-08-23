@@ -5,10 +5,11 @@ import (
 	"math"
 
 	"github.com/hajimehoshi/ebiten"
+	"github.com/oyberntzen/Raycasting-in-Golang/packages"
 )
 
-var player Player
-var enviroment Enviroment
+var player packages.Player
+var enviroment packages.Enviroment
 
 const width int = 1920
 const height int = 1080
@@ -26,7 +27,7 @@ func (e *Exit) Error() string {
 
 //Update handles the logic. 60fps
 func (g *Game) Update(screen *ebiten.Image) error {
-	player.update(screen, &enviroment)
+	player.Update(screen, &enviroment)
 	if ebiten.IsKeyPressed(ebiten.KeyEscape) {
 		return &Exit{}
 	}
@@ -35,7 +36,7 @@ func (g *Game) Update(screen *ebiten.Image) error {
 
 //Draw handles displaying each frame. 60fps
 func (g *Game) Draw(screen *ebiten.Image) {
-	player.draw3D(screen, &enviroment)
+	player.Draw3D(screen, &enviroment)
 	//env.draw2D(screen)
 	//player.draw2D(screen)
 }
@@ -46,11 +47,11 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeigh
 }
 
 func main() {
-	player = Player{}
-	player.init(22.5, 10.5, -math.Pi/2, width/scaleDown, height/scaleDown)
+	player = packages.Player{}
+	player.Init(22.5, 10.5, -math.Pi/2, width/scaleDown, height/scaleDown)
 
-	enviroment = Enviroment{}
-	enviroment.init(Level01)
+	enviroment = packages.Enviroment{}
+	enviroment.Init(packages.Level01)
 
 	ebiten.SetWindowSize(width, height)
 	ebiten.SetWindowTitle("Raycasting")

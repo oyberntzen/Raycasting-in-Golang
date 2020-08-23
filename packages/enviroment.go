@@ -1,4 +1,4 @@
-package main
+package packages
 
 import (
 	"image"
@@ -19,7 +19,8 @@ type Enviroment struct {
 	textures       []image.Image
 }
 
-func (env *Enviroment) init(level Level) {
+//Init initializes the enviroment with the specified level
+func (env *Enviroment) Init(level Level) {
 	env.cellsx = len(level.cells[0])
 	env.cellsy = len(level.cells)
 
@@ -40,7 +41,8 @@ func (env *Enviroment) init(level Level) {
 		load("./images/greenlight.png"))
 }
 
-func (env *Enviroment) draw2D(screen *ebiten.Image) {
+//Draw2D draws the walls in a 2D map on the screen
+func (env *Enviroment) Draw2D(screen *ebiten.Image) {
 	cellsizex := screen.Bounds().Max.X / env.cellsx
 	cellsizey := screen.Bounds().Max.Y / env.cellsy
 	for y := 0; y < env.cellsy; y++ {
