@@ -79,7 +79,7 @@ func (player *Player) Update(screen *ebiten.Image, env *Enviroment, delta float6
 	player.handleInput(screen, env, delta, scaleDown)
 
 	player.velZ -= 0.003
-	player.PosZ = math.Min(math.Max(player.PosZ+player.velZ, 0), float64(player.ScreenHeight)*0.001)
+	player.PosZ = math.Min(math.Max(player.PosZ+player.velZ, 0), 0.4)
 
 	player.frontRay = player.ray(env, 0).length
 
@@ -281,13 +281,21 @@ func (player *Player) drawSprites(screen *ebiten.Image, env *Enviroment, sprites
 		screenX := int((float64(player.ScreenWidth) / 2) * (1 + transformX/transformY))
 		spriteSize := int(math.Abs(float64(player.ScreenHeight) / transformY))
 
-		for x := int(math.Max(float64(screenX-spriteSize/2), 0)); x < int(math.Min(float64(screenX+spriteSize/2), float64(player.ScreenWidth-1))); x++ {
+		yMoveScreen := sprite.yMove / transformY * float64(player.ScreenHeight)
+		change := pitch - yMoveScreen
+
+		start := int(math.Max(float64(screenX-spriteSize/2), 0))
+		end := int(math.Min(float64(screenX+spriteSize/2), float64(player.ScreenWidth-1)))
+		for x := start; x < end; x++ {
+
 			imgx := int((float64(x-(screenX-spriteSize/2)) / float64(spriteSize)) * float64(env.textures[sprite.Texture].Bounds().Max.X))
 			if player.rays[x].length > transformY && transformY > 0 {
-				start := int(math.Max(float64((player.ScreenHeight-spriteSize)/2)+pitch+player.PosZ*float64(player.ScreenHeight)/transformY, 0))
-				end := int(math.Min(float64((player.ScreenHeight-spriteSize)/2+spriteSize)+pitch+player.PosZ*float64(player.ScreenHeight)/transformY, float64(player.ScreenHeight)))
+
+				start := int(math.Max(float64((player.ScreenHeight-spriteSize)/2)+change+player.PosZ*float64(player.ScreenHeight)/transformY, 0))
+				end := int(math.Min(float64((player.ScreenHeight-spriteSize)/2+spriteSize)+change+player.PosZ*float64(player.ScreenHeight)/transformY, float64(player.ScreenHeight)))
 				for y := start; y < end; y++ {
-					imgy := int(((float64(y-(player.ScreenHeight-spriteSize)/2) - pitch - player.PosZ*float64(player.ScreenHeight)/transformY) / float64(spriteSize)) * float64(env.textures[sprite.Texture].Bounds().Max.Y))
+
+					imgy := int(((float64(y-(player.ScreenHeight-spriteSize)/2) - change - player.PosZ*float64(player.ScreenHeight)/transformY) / float64(spriteSize)) * float64(env.textures[sprite.Texture].Bounds().Max.Y))
 					r, g, b, a := env.textures[sprite.Texture].At(imgx, imgy).RGBA()
 					if a != 0 {
 						screen.Set(x, y, color.RGBA{uint8(r), uint8(g), uint8(b), uint8(a)})
@@ -355,7 +363,7 @@ func (player *Player) handleInput(screen *ebiten.Image, env *Enviroment, delta f
 		player.PosY += nextY
 	}
 	if ebiten.IsKeyPressed(ebiten.KeySpace) && player.PosZ == 0 {
-		player.velZ = 0.045
+		player.velZ = 0.05
 	}
 	cursorX, cursorY := ebiten.CursorPosition()
 	newCursorX := float64(cursorX)

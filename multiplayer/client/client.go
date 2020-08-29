@@ -23,7 +23,7 @@ var lastTime float64 = getTime()
 const width int = 500
 const height int = 500
 
-var scaleDown int = 3
+var scaleDown int = 2
 
 //Game is the struct that implements ebiten.Game
 type Game struct{}
@@ -118,7 +118,7 @@ func updateSprites() {
 	playerSprites = []game.Sprite{}
 	for i, player := range players {
 		if i != notDraw {
-			playerSprites = append(playerSprites, game.NewSprite(player.PosX, player.PosY, 11))
+			playerSprites = append(playerSprites, game.NewSprite(player.PosX, player.PosY, 11, player.PosZ))
 		}
 	}
 }

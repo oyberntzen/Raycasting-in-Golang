@@ -72,11 +72,12 @@ type Sprite struct {
 	PosY     float64
 	Texture  int
 	distance float64
+	yMove    float64
 }
 
 //NewSprite creates a new Sprite
-func NewSprite(x, y float64, t int) Sprite {
-	return Sprite{x, y, t, 0}
+func NewSprite(x, y float64, t int, yMove float64) Sprite {
+	return Sprite{x, y, t, 0, yMove}
 }
 
 func load(path string) image.Image {
@@ -112,24 +113,24 @@ var Level01 Level = Level{[][]int{
 	{2, 2, 0, 0, 0, 0, 0, 2, 2, 2, 0, 0, 0, 2, 2, 0, 5, 0, 5, 0, 0, 0, 5, 5},
 	{2, 2, 2, 2, 1, 2, 2, 2, 2, 2, 2, 1, 2, 2, 2, 5, 5, 5, 5, 5, 5, 5, 5, 5}},
 	[]Sprite{
-		Sprite{20.5, 11.5, 10, 0},
-		Sprite{18.5, 4.5, 10, 0},
-		Sprite{10.0, 4.5, 10, 0},
-		Sprite{10.0, 12.5, 10, 0},
-		Sprite{3.5, 6.5, 10, 0},
-		Sprite{3.5, 20.5, 10, 0},
-		Sprite{3.5, 14.5, 10, 0},
-		Sprite{14.5, 20.5, 10, 0},
-		Sprite{18.5, 10.5, 9, 0},
-		Sprite{18.5, 11.5, 9, 0},
-		Sprite{18.5, 12.5, 9, 0},
-		Sprite{21.5, 1.5, 8, 0},
-		Sprite{15.5, 1.5, 8, 0},
-		Sprite{16.0, 1.8, 8, 0},
-		Sprite{16.2, 1.2, 8, 0},
-		Sprite{3.5, 2.5, 8, 0},
-		Sprite{9.5, 15.5, 8, 0},
-		Sprite{10.0, 15.1, 8, 0},
-		Sprite{10.5, 15.8, 8, 0},
+		NewSprite(20.5, 11.5, 10, 0),
+		NewSprite(18.5, 4.5, 10, 0),
+		NewSprite(10.0, 4.5, 10, 0),
+		NewSprite(10.0, 12.5, 10, 0),
+		NewSprite(3.5, 6.5, 10, 0),
+		NewSprite(3.5, 20.5, 10, 0),
+		NewSprite(3.5, 14.5, 10, 0),
+		NewSprite(14.5, 20.5, 10, 0),
+		NewSprite(18.5, 10.5, 9, 0),
+		NewSprite(18.5, 11.5, 9, 0),
+		NewSprite(18.5, 12.5, 9, 0),
+		NewSprite(21.5, 1.5, 8, 0),
+		NewSprite(15.5, 1.5, 8, 0),
+		NewSprite(16.0, 1.8, 8, 0),
+		NewSprite(16.2, 1.2, 8, 0),
+		NewSprite(3.5, 2.5, 8, 0),
+		NewSprite(9.5, 15.5, 8, 0),
+		NewSprite(10.0, 15.1, 8, 0),
+		NewSprite(10.5, 15.8, 8, 0),
 	},
 }
