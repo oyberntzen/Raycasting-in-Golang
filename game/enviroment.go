@@ -32,7 +32,7 @@ func (env *Enviroment) Init(level Level, dir string) {
 //InitTextures only initializes the textures
 func (env *Enviroment) InitTextures(dir string) {
 	env.textures = append(env.textures,
-		load(dir+"eagle.png"),
+		load(dir+"space.png"),
 		load(dir+"redbrick.png"),
 		load(dir+"purplestone.png"),
 		load(dir+"greystone.png"),

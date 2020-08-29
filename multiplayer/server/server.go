@@ -7,12 +7,13 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/oyberntzen/Raycasting-in-Golang/game"
 )
 
 var env game.Enviroment
-var players []game.Player
+var players sync.Map
 
 func main() {
 	env = game.Enviroment{}
@@ -24,14 +25,14 @@ func main() {
 	l, _ := net.Listen("tcp", ":8000")
 	defer l.Close()
 
-	for {
+	for i := 0; true; i++ {
 		c, _ := l.Accept()
-		go playerConnection(c)
+		go playerConnection(c, i)
 	}
 
 }
 
-func playerConnection(c net.Conn) {
+func playerConnection(c net.Conn, id int) {
 	enc := gob.NewEncoder(c)
 	dec := gob.NewDecoder(c)
 
@@ -42,21 +43,26 @@ func playerConnection(c net.Conn) {
 	p := game.Player{}
 	p.Init(22.5, 10.5, -math.Pi/2, width, height)
 	//num := len(players)
-	num := len(players)
-	players = append(players, p)
-	player := &players[num]
+	players.Store(id, p)
 
 	handleError(enc.Encode(env))
-	handleError(enc.Encode(player))
-	handleError(enc.Encode(num))
+	handleError(enc.Encode(p))
+	handleError(enc.Encode(id))
 
 	for {
-		err := dec.Decode(&player)
+		err := dec.Decode(&p)
+		players.Store(id, p)
 		if err != nil {
-			players = append(players[:num], players[num+1:]...)
+			players.Delete(id)
 			break
 		}
-		handleError(enc.Encode(players))
+		newMap := make(map[int]game.Player)
+		players.Range(func(key, value interface{}) bool {
+			i, player := key.(int), value.(game.Player)
+			newMap[i] = player
+			return true
+		})
+		handleError(enc.Encode(newMap))
 	}
 }
 
