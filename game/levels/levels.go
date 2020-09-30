@@ -1,6 +1,8 @@
 package levels
 
-import "github.com/oyberntzen/Raycasting-in-Golang/game"
+import (
+	"github.com/oyberntzen/Raycasting-in-Golang/networking"
+)
 
 //SpriteInfo is info needed to create a new sprite
 type SpriteInfo struct {
@@ -34,7 +36,7 @@ const (
 //Level is a struct for levels
 type Level struct {
 	Cells   [][]uint8
-	Sprites []game.Sprite
+	Sprites []networking.Sprite
 }
 
 //Level01 is the first level
@@ -84,7 +86,7 @@ var Level01 Level = Level{[][]uint8{
 		CreateBarrel(10.0, 15.1, 0.4),
 		CreateBarrel(10.5, 15.8, 0.4),
 	},*/
-	[]game.Sprite{
+	[]networking.Sprite{
 		CreateSprite(LampInfo, 20.5, 11.5, 0, 0.3, 0, SpriteZCeiling),
 		CreateSprite(LampInfo, 18.5, 4.5, 0, 0.3, 0, SpriteZCeiling),
 		CreateSprite(LampInfo, 10.0, 4.5, 0, 0.3, 0, SpriteZCeiling),
@@ -110,7 +112,7 @@ var Level01 Level = Level{[][]uint8{
 }
 
 //CreateSprite creates a new sprite
-func CreateSprite(spriteInfo SpriteInfo, x, y, z, width, height float64, zOption SpriteZOption) game.Sprite {
+func CreateSprite(spriteInfo SpriteInfo, x, y, z, width, height float64, zOption SpriteZOption) networking.Sprite {
 	if width == 0 && height == 0 {
 		if spriteInfo.Width > spriteInfo.Height {
 			width = 1
@@ -130,7 +132,7 @@ func CreateSprite(spriteInfo SpriteInfo, x, y, z, width, height float64, zOption
 		z = (1 - float64(height)) / 2
 	}
 
-	return game.Sprite{X: x, Y: y, Z: z, W: width, H: height, Texture: spriteInfo.Texture}
+	return networking.Sprite{X: x, Y: y, Z: z, W: width, H: height, Texture: spriteInfo.Texture}
 }
 
 /*//CalculateZ calculates Z value of sprite when it is on the ground from height. Inverse value gives Z value of sprite when it hangs in the ceiling.

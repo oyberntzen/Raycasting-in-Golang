@@ -5,6 +5,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/oyberntzen/Raycasting-in-Golang/game/physics"
@@ -12,16 +13,15 @@ import (
 	"github.com/enriquebris/goconcurrentqueue"
 
 	"github.com/hajimehoshi/ebiten"
-	"github.com/oyberntzen/Raycasting-in-Golang/game"
 	"github.com/oyberntzen/Raycasting-in-Golang/game/graphics"
 	"github.com/oyberntzen/Raycasting-in-Golang/networking"
 )
 
 var (
 	cells   [][]uint8
-	sprites []game.Sprite
-	player  game.Player
-	players []game.Player
+	sprites []networking.Sprite
+	player  networking.Player
+	players []networking.Player
 
 	playerID       uint8
 	gameState      int
@@ -32,6 +32,13 @@ var (
 	pressedShoot   bool
 	firstShake     bool
 	prot           networking.Protocol
+
+	oldPlayers []networking.Player
+	oldInputs  []networking.Input
+	inputLock  sync.Mutex
+
+	frame            uint64
+	lastOtherPlayers []networking.Player
 )
 
 const (
@@ -113,7 +120,7 @@ func serverConnection(conn net.Conn) {
 				events = goconcurrentqueue.NewFIFO()
 				playerID = serverInfo.ThisPlayer.PlayerID
 				input = networking.Input{}
-				players = []game.Player{}
+				players = []networking.Player{}
 
 				go updateInput()
 
@@ -121,19 +128,54 @@ func serverConnection(conn net.Conn) {
 			}
 			if id == networking.SnapshotPacket {
 				snapshot := prot.DecodeSnapshot(data)
-				player = snapshot.ThisPlayer
-				players = snapshot.OtherPlayers
+				newPlayer := snapshot.ThisPlayer
+				frame = snapshot.Frame
+
+				players = make([]networking.Player, len(lastOtherPlayers))
+				for i := 0; i < len(lastOtherPlayers); i++ {
+					players[i] = lastOtherPlayers[i]
+					for _, p := range snapshot.OtherPlayers {
+						if p.PlayerID == players[i].PlayerID && p.PlayerID != playerID {
+							players[i].LastInputs = make([]networking.Input, len(p.LastInputs))
+							copy(players[i].LastInputs, p.LastInputs)
+							go updateOtherPlayer(i, frame)
+						}
+					}
+
+				}
+
+				lastOtherPlayers = make([]networking.Player, len(snapshot.OtherPlayers))
+				for i := 0; i < len(snapshot.OtherPlayers); i++ {
+					lastOtherPlayers[i] = snapshot.OtherPlayers[i]
+				}
+
+				if len(oldPlayers) > 0 {
+					inputLock.Lock()
+					firstInputNumber := oldPlayers[0].LastInputNumber
+					if firstInputNumber < newPlayer.LastInputNumber {
+						diff := newPlayer.LastInputNumber - firstInputNumber
+						checkPlayer := oldPlayers[diff]
+						if !(newPlayer.Angle == checkPlayer.Angle && newPlayer.Pitch == checkPlayer.Pitch &&
+							newPlayer.X == checkPlayer.X && newPlayer.Y == checkPlayer.Y && newPlayer.Z == checkPlayer.Z) {
+							player = physics.HandleInputs(newPlayer, oldInputs[diff:], cells)
+						}
+						oldPlayers = oldPlayers[diff+1:]
+						oldInputs = oldInputs[diff+1:]
+					}
+					inputLock.Unlock()
+				}
+
 			}
 		}
 
 		//Send pending event
-		if events.GetLen() > 0 {
+		/*if events.GetLen() > 0 {
 			val, err := events.Dequeue()
 			handleError(err)
 			if event, ok := val.(networking.Event); ok {
 				handleError(prot.Send(event, networking.EventPacket))
 			}
-		} /*else {
+		} else {
 			//Otherwise send input
 			newX, newY := ebiten.CursorPosition()
 			deltaX, deltaY := int16(newX*scaleDown)-mouseX, int16(newY*scaleDown)-mouseY
@@ -153,25 +195,29 @@ func serverConnection(conn net.Conn) {
 
 func updateInput() {
 	last := float32(getTime())
+	lastInput := networking.Input{TimeStamp: last}
+	var number uint64 = 0
 	for {
 		time.Sleep(time.Second / 120)
 		now := float32(getTime())
 		delta := now - last
-		if delta > 50 {
-			delta = (now - 60) - last
+
+		if delta < 0 {
+			delta += 60
 		}
-		last = float32(getTime())
+		last = now
+
 		if ebiten.IsKeyPressed(ebiten.KeyW) {
-			input.Up = delta
+			input.Up = true
 		}
 		if ebiten.IsKeyPressed(ebiten.KeyS) {
-			input.Down = delta
+			input.Down = true
 		}
 		if ebiten.IsKeyPressed(ebiten.KeyA) {
-			input.Left = delta
+			input.Left = true
 		}
 		if ebiten.IsKeyPressed(ebiten.KeyD) {
-			input.Right = delta
+			input.Right = true
 		}
 		if ebiten.IsKeyPressed(ebiten.KeySpace) {
 			if !pressedSpace {
@@ -201,9 +247,39 @@ func updateInput() {
 		mouseX, mouseY = int16(newX*scaleDown), int16(newY*scaleDown)
 
 		input.TimeStamp = now
+		input.Number = number
+
+		player = physics.HandleInputs(player, []networking.Input{lastInput, input}, cells)
+		player.LastInputNumber = number
+		lastInput = input
+
+		inputLock.Lock()
+		oldPlayers = append(oldPlayers, player)
+		oldInputs = append(oldInputs, input)
+		inputLock.Unlock()
 
 		handleError(prot.Send(input, networking.InputPacket))
 		input = networking.Input{}
+
+		number++
+
+	}
+}
+
+func updateOtherPlayer(i int, f uint64) {
+	inputs := players[i].LastInputs
+	for num, input := range inputs {
+		if frame != f {
+			return
+		}
+		if num > 0 {
+			players[i] = physics.HandleInputs(players[i], []networking.Input{inputs[num-1], input}, cells)
+			delta := input.TimeStamp - inputs[num-1].TimeStamp
+			if delta < 0 {
+				delta += 60
+			}
+			time.Sleep(time.Duration(delta*1000000000) * time.Nanosecond)
+		}
 	}
 }
 

@@ -10,7 +10,7 @@ import (
 
 const (
 	//PlayerSize is the width of the player
-	PlayerSize float64 = 0.3
+	PlayerSize float64 = 0.33
 	//PlayerSpeed is the maximum speed of the player in units per second
 	PlayerSpeed float64 = 3
 )
@@ -29,7 +29,7 @@ func doCollide(start, end, other float64, isX bool, cells [][]uint8) float64 {
 	}
 	if round(cend) == round(start) {
 		return end
-	} else if cend > 0 && cend < float64(len(cells[0])) {
+	} else if int(cend) > 0 && int(cend) < len(cells[0]) && int(other) > 0 && int(other) < len(cells[0]) {
 		if isX {
 			if cells[int(other)][int(cend)] == 0 {
 				return end
@@ -56,7 +56,7 @@ func round(number float64) int {
 }
 
 //Hit calculates if a player aims at another player
-func Hit(shootPlayer game.Player, otherPlayer game.Player, cells [][]uint8) bool {
+func Hit(shootPlayer networking.Player, otherPlayer networking.Player, cells [][]uint8) bool {
 	relX := otherPlayer.X - shootPlayer.X
 	relY := otherPlayer.Y - shootPlayer.Y
 
@@ -72,14 +72,18 @@ func Hit(shootPlayer game.Player, otherPlayer game.Player, cells [][]uint8) bool
 }
 
 //HandleInputs moves the player with the inputs
-func HandleInputs(player game.Player, inputs []networking.Input, cells [][]uint8) game.Player {
+func HandleInputs(player networking.Player, inputs []networking.Input, cells [][]uint8) networking.Player {
+	/*sort.SliceStable(inputs, func(i, j int) bool {
+		return inputs[i].Number < inputs[j].Number
+	})*/
+
 	for i, input := range inputs {
 		if i == 0 {
 			continue
 		}
 		delta := float64(input.TimeStamp - inputs[i-1].TimeStamp)
-		if delta > 50 {
-			delta -= 60
+		if delta < 0 {
+			delta += 60
 		}
 
 		player.Angle += float64(input.MouseX) * 0.002
@@ -92,12 +96,25 @@ func HandleInputs(player game.Player, inputs []networking.Input, cells [][]uint8
 		player.Pitch = math.Max(math.Min(player.Pitch-float64(input.MouseY)*0.002, 1), -1)
 
 		dirXFor, dirYFor := math.Cos(player.Angle), math.Sin(player.Angle)
-		nextX := dirXFor*float64(input.Up) - dirXFor*float64(input.Down)
-		nextY := dirYFor*float64(input.Up) - dirYFor*float64(input.Down)
-
 		dirXLeft, dirYLeft := math.Cos(player.Angle-math.Pi/2), math.Sin(player.Angle-math.Pi/2)
-		nextX += dirXLeft*float64(input.Left) - dirXLeft*float64(input.Right)
-		nextY += dirYLeft*float64(input.Left) - dirYLeft*float64(input.Right)
+		nextX := 0.0
+		nextY := 0.0
+		if input.Up {
+			nextX += dirXFor
+			nextY += dirYFor
+		}
+		if input.Down {
+			nextX -= dirXFor
+			nextY -= dirYFor
+		}
+		if input.Left {
+			nextX += dirXLeft
+			nextY += dirYLeft
+		}
+		if input.Right {
+			nextX -= dirXLeft
+			nextY -= dirYLeft
+		}
 
 		angle := math.Atan2(nextY, nextX)
 		if nextX != 0 {
@@ -110,9 +127,9 @@ func HandleInputs(player game.Player, inputs []networking.Input, cells [][]uint8
 		player.X, player.Y = Collision(player.X, player.Y, player.X+nextX, player.Y+nextY, cells)
 
 		if player.Z <= 0 && input.Jump {
-			player.Vel = 0.05
+			player.Vel = 0.043
 		}
-		player.Vel = math.Min(math.Max(player.Vel-0.17*delta, -0.1), 0.1)
+		player.Vel = math.Min(math.Max(player.Vel-0.2*delta, -0.1), 0.1)
 		player.Z = math.Min(math.Max(player.Z+player.Vel, 0), 0.4)
 	}
 

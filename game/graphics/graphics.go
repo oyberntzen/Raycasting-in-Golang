@@ -16,6 +16,7 @@ import (
 
 	"github.com/oyberntzen/Raycasting-in-Golang/game"
 	"github.com/oyberntzen/Raycasting-in-Golang/game/levels"
+	"github.com/oyberntzen/Raycasting-in-Golang/networking"
 )
 
 var (
@@ -46,12 +47,14 @@ func Init(dir string, width, height int) {
 }
 
 //Draw3D draws walls, floor, ceiling and sprites from the first person view of the player
-func Draw3D(screen *ebiten.Image, player game.Player, cells [][]uint8, sprites []game.Sprite, players []game.Player, width, height int, playerSize float64) {
+func Draw3D(screen *ebiten.Image, player networking.Player, cells [][]uint8, sprites []networking.Sprite, players []networking.Player, width, height int, playerSize float64) {
 	dirX, dirY := game.Rotate(1, 0, player.Angle)
 	planeX, planeY := game.Rotate(0, 0.5*(float64(width)/float64(height)), player.Angle)
 
 	for _, p := range players {
-		sprites = append(sprites, levels.CreateSprite(levels.PlayerInfo, p.X, p.Y, p.Z, playerSize, 0, levels.SpriteZFree))
+		sprite := levels.CreateSprite(levels.PlayerInfo, p.X, p.Y, 0, playerSize, 0, levels.SpriteZFloor)
+		sprite.Z += p.Z
+		sprites = append(sprites, sprite)
 	}
 
 	dists, indicies, texs := rayCast(player, cells, width, dirX, dirY, planeX, planeY)
@@ -62,7 +65,7 @@ func Draw3D(screen *ebiten.Image, player game.Player, cells [][]uint8, sprites [
 }
 
 //Ray shoots ray from player and calculates distance to wall
-func Ray(player game.Player, cells [][]uint8, rayDirX, rayDirY float64) (float64, float64, uint8) {
+func Ray(player networking.Player, cells [][]uint8, rayDirX, rayDirY float64) (float64, float64, uint8) {
 	dist := float64(0)
 
 	curcell := [2]int{int(player.X), int(player.Y)}
@@ -139,7 +142,7 @@ func Ray(player game.Player, cells [][]uint8, rayDirX, rayDirY float64) (float64
 	}
 }
 
-func rayCast(player game.Player, cells [][]uint8, width int, dirX, dirY, planeX, planeY float64) ([]float64, []float64, []uint8) {
+func rayCast(player networking.Player, cells [][]uint8, width int, dirX, dirY, planeX, planeY float64) ([]float64, []float64, []uint8) {
 	dists := []float64{}
 	indicies := []float64{}
 	texs := []uint8{}
@@ -158,7 +161,7 @@ func rayCast(player game.Player, cells [][]uint8, width int, dirX, dirY, planeX,
 	return dists, indicies, texs
 }
 
-func drawFloorCeiling(screen *ebiten.Image, player game.Player, width, height int, dirX, dirY, planeX, planeY float64) {
+func drawFloorCeiling(screen *ebiten.Image, player networking.Player, width, height int, dirX, dirY, planeX, planeY float64) {
 	twidthf := textures[3].Bounds().Max.X
 	theightf := textures[3].Bounds().Max.Y
 	twidthc := textures[6].Bounds().Max.X
@@ -212,7 +215,7 @@ func drawFloorCeiling(screen *ebiten.Image, player game.Player, width, height in
 	}
 }
 
-func drawWalls(screen *ebiten.Image, player game.Player, dists, indicies []float64, texs []uint8, height int) {
+func drawWalls(screen *ebiten.Image, player networking.Player, dists, indicies []float64, texs []uint8, height int) {
 	pitch := player.Pitch * float64(height)
 	for x := 0; x < len(dists); x++ {
 		if texs[x] != 0 {
@@ -235,7 +238,7 @@ func drawWalls(screen *ebiten.Image, player game.Player, dists, indicies []float
 	}
 }
 
-func drawSprites(screen *ebiten.Image, player game.Player, sprites []game.Sprite, dists []float64, dirX, dirY, planeX, planeY float64, width, height int) {
+func drawSprites(screen *ebiten.Image, player networking.Player, sprites []networking.Sprite, dists []float64, dirX, dirY, planeX, planeY float64, width, height int) {
 	distances := [][2]float64{}
 	for i, sprite := range sprites {
 		distances = append(distances, [2]float64{math.Pow(player.X-sprite.X, 2) + math.Pow(player.Y-sprite.Y, 2), float64(i)})
@@ -304,7 +307,7 @@ func drawUI(screen *ebiten.Image, width, height int) {
 }
 
 //Draw2D draws a top-down view
-func Draw2D(screen *ebiten.Image, cells [][]uint8, players []game.Player, playerSize float64, width, height int) {
+func Draw2D(screen *ebiten.Image, cells [][]uint8, players []networking.Player, playerSize float64, width, height int) {
 	cellsizex := float64(width) / float64(len(cells[0]))
 	cellsizey := float64(height) / float64(len(cells))
 	for y := 0; y < len(cells); y++ {

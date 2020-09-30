@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"math"
 	"net"
@@ -8,7 +9,6 @@ import (
 	"time"
 
 	"github.com/hajimehoshi/ebiten"
-	"github.com/oyberntzen/Raycasting-in-Golang/game"
 	"github.com/oyberntzen/Raycasting-in-Golang/game/graphics"
 	"github.com/oyberntzen/Raycasting-in-Golang/game/levels"
 	"github.com/oyberntzen/Raycasting-in-Golang/game/physics"
@@ -16,16 +16,18 @@ import (
 )
 
 var (
-	cells        [][]uint8
-	sprites      []game.Sprite
-	players      sync.Map
-	playerInputs sync.Map
-	playerProts  sync.Map
+	cells                           [][]uint8
+	sprites                         []networking.Sprite
+	players                         map[uint8]networking.Player
+	playerInputs                    map[uint8][]networking.Input
+	playerProts                     map[uint8]networking.Protocol
+	playerLock, inputLock, protLock sync.Mutex
 )
 
 const (
-	width  int = 500
-	height int = 500
+	width    int = 500
+	height   int = 500
+	timeStep int = 250
 )
 
 //Game is the struct that implements ebiten.Game
@@ -48,12 +50,14 @@ func (g *Game) Update(screen *ebiten.Image) error {
 
 //Draw handles displaying each frame
 func (g *Game) Draw(screen *ebiten.Image) {
-	playersSlice := []game.Player{}
-	players.Range(func(key interface{}, val interface{}) bool {
-		player := val.(game.Player)
+	playersSlice := []networking.Player{}
+
+	playerLock.Lock()
+	for _, player := range players {
 		playersSlice = append(playersSlice, player)
-		return true
-	})
+	}
+	playerLock.Unlock()
+
 	graphics.Draw2D(screen, cells, playersSlice, physics.PlayerSize, width, height)
 }
 
@@ -65,6 +69,10 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeigh
 func main() {
 	cells = levels.Level01.Cells
 	sprites = levels.Level01.Sprites
+
+	players = make(map[uint8]networking.Player)
+	playerInputs = make(map[uint8][]networking.Input)
+	playerProts = make(map[uint8]networking.Protocol)
 
 	l, _ := net.Listen("tcp", ":8000")
 	defer l.Close()
@@ -82,64 +90,84 @@ func main() {
 }
 
 func mainLoop() {
+	var frame uint64 = 0
 	for {
-		time.Sleep(time.Second / 10)
-		playerInputs.Range(func(key, val interface{}) bool {
-			id := key.(uint8)
-			inputs := val.([]networking.Input)
-			playerInputs.Store(id, []networking.Input{inputs[len(inputs)-1]})
+		start := getTime()
 
-			val, ok := players.Load(id)
-			if !ok {
-				players.Delete(id)
-				playerInputs.Delete(id)
-				playerProts.Delete(id)
-				return true
+		shots := []networking.Player{}
+		inputLock.Lock()
+		for id, inputs := range playerInputs {
+			for i, input := range inputs {
+				if input.Shoot {
+					playerLock.Lock()
+					player := physics.HandleInputs(players[id], inputs[:i], cells)
+					playerLock.Unlock()
+					player.LastInputs = []networking.Input{input}
+					shots = append(shots, player)
+				}
+			}
+		}
+
+		for id, inputs := range playerInputs {
+			if len(playerInputs[id]) == 0 {
+				continue
 			}
 
-			player := val.(game.Player)
+			for _, shot := range shots {
+				if shot.PlayerID == id {
+					continue
+				}
+				timeStamp := shot.LastInputs[0].TimeStamp
+				i := 0
+				for {
+					if i < len(inputs)-1 {
+						if inputs[i+1].TimeStamp < timeStamp {
+							i++
+						}
+					} else {
+						i = len(inputs) - 1
+						break
+					}
+				}
+				fmt.Println(i, timeStamp, inputs[i].TimeStamp)
+			}
+
+			playerInputs[id] = []networking.Input{inputs[len(inputs)-1]}
+			player := players[id]
 
 			player = physics.HandleInputs(player, inputs, cells)
+			player.LastInputNumber = inputs[len(inputs)-1].Number
+			player.LastInputs = inputs
 
-			players.Store(id, player)
+			players[id] = player
+		}
+		inputLock.Unlock()
 
-			return true
-		})
-
-		playerProts.Range(func(key, val interface{}) bool {
-			prot := val.(networking.Protocol)
-			id := key.(uint8)
-
-			val, ok := players.Load(id)
-			if !ok {
-				players.Delete(id)
-				playerInputs.Delete(id)
-				playerProts.Delete(id)
-				return true
-			}
-
+		protLock.Lock()
+		playerLock.Lock()
+		for id, prot := range playerProts {
 			snapshot := networking.Snapshot{}
-			snapshot.ThisPlayer = val.(game.Player)
-			snapshot.OtherPlayers = []game.Player{}
+			snapshot.ThisPlayer = players[id]
+			snapshot.OtherPlayers = []networking.Player{}
+			snapshot.Frame = frame
 
-			players.Range(func(key interface{}, val interface{}) bool {
-				otherPlayer := val.(game.Player)
-				otherid := key.(uint8)
+			for otherid, otherPlayer := range players {
 				if otherid != id {
 					snapshot.OtherPlayers = append(snapshot.OtherPlayers, otherPlayer)
 				}
-				return true
-			})
+			}
 
 			err := prot.Send(snapshot, networking.SnapshotPacket)
 			if err != nil {
-				players.Delete(id)
-				playerInputs.Delete(id)
-				playerProts.Delete(id)
+				deletePlayer(id)
 			}
+		}
+		protLock.Unlock()
+		playerLock.Unlock()
+		frame++
 
-			return true
-		})
+		end := getTime()
+		time.Sleep(time.Millisecond*time.Duration(timeStep) - time.Duration((end-start)*1000000000)*time.Nanosecond)
 	}
 }
 
@@ -152,16 +180,23 @@ func handlePlayers(l net.Listener) {
 
 func playerConnection(c net.Conn, id uint8) {
 	prot := networking.CreateProtocol(c)
-	thisPlayer := game.Player{PlayerID: id, X: 22.5, Y: 10.5, Z: 0, Angle: -math.Pi / 2, Pitch: 0, Health: 100}
+	thisPlayer := networking.Player{PlayerID: id, X: 22.5, Y: 10.5, Z: 0, Angle: -math.Pi / 2, Pitch: 0, Health: 100}
 	info := networking.ServerInfo{ThisPlayer: thisPlayer, Cells: cells, Sprites: sprites}
-	players.Store(id, thisPlayer)
+
+	playerLock.Lock()
+	players[id] = thisPlayer
+	playerLock.Unlock()
 
 	lastTime := getTime()
 
 	inputs := []networking.Input{networking.Input{TimeStamp: float32(lastTime)}}
-	playerInputs.Store(id, inputs)
+	inputLock.Lock()
+	playerInputs[id] = inputs
+	inputLock.Unlock()
 
-	playerProts.Store(id, prot)
+	protLock.Lock()
+	playerProts[id] = prot
+	protLock.Unlock()
 
 	handleError(prot.Send(info, networking.ServerInfoPacket))
 
@@ -169,64 +204,19 @@ func playerConnection(c net.Conn, id uint8) {
 		//Handle message from client
 		pid, data, err := prot.Recieve()
 		if err != nil {
-			players.Delete(id)
-			playerInputs.Delete(id)
-			playerProts.Delete(id)
+			deletePlayer(id)
 			break
 		}
 
 		if pid != networking.NilPacket {
 			if pid == networking.InputPacket {
-				val, _ := playerInputs.Load(id)
-				inputs := val.([]networking.Input)
+				inputLock.Lock()
+				inputs := playerInputs[id]
 				input := prot.DecodeInput(data)
 				inputs = append(inputs, input)
-				playerInputs.Store(id, inputs)
-				/*time.Sleep(time.Second / 60)
-
-				//Handle input sent from client
-				input := prot.DecodeInput(data)
-
-				nowTime := getTime()
-				delta := nowTime - lastTime
-				if delta < 0 {
-					delta = nowTime - (lastTime - 60)
-				}
-				lastTime = getTime()
-
-				thisPlayer.Angle += float64(input.MouseX) * 0.002
-				if thisPlayer.Angle < -math.Pi {
-					thisPlayer.Angle += math.Pi * 2
-				} else if thisPlayer.Angle > math.Pi {
-					thisPlayer.Angle -= math.Pi * 2
-				}
-
-				thisPlayer.Pitch = math.Max(math.Min(thisPlayer.Pitch-float64(input.MouseY)*0.002, 1), -1)
-
-				dirXFor, dirYFor := math.Cos(thisPlayer.Angle), math.Sin(thisPlayer.Angle)
-				nextX := dirXFor*float64(input.Up) - dirXFor*float64(input.Down)
-				nextY := dirYFor*float64(input.Up) - dirYFor*float64(input.Down)
-
-				dirXLeft, dirYLeft := math.Cos(thisPlayer.Angle-math.Pi/2), math.Sin(thisPlayer.Angle-math.Pi/2)
-				nextX += dirXLeft*float64(input.Left) - dirXLeft*float64(input.Right)
-				nextY += dirYLeft*float64(input.Left) - dirYLeft*float64(input.Right)
-
-				angle := math.Atan2(nextY, nextX)
-				if nextX != 0 {
-					nextX = math.Cos(angle) * physics.PlayerSpeed * delta
-				}
-				if nextY != 0 {
-					nextY = math.Sin(angle) * physics.PlayerSpeed * delta
-				}
-
-				thisPlayer.X, thisPlayer.Y = physics.Collision(thisPlayer.X, thisPlayer.Y, thisPlayer.X+nextX, thisPlayer.Y+nextY, cells)
-
-				players.Store(id, thisPlayer)
-
-				//Update Z based on velocity
-				thisPlayer.Vel = math.Min(math.Max(thisPlayer.Vel-0.17*delta, -0.1), 0.1)
-				thisPlayer.Z = math.Min(math.Max(thisPlayer.Z+thisPlayer.Vel, 0), 0.4)*/
-			} else if pid == networking.EventPacket {
+				playerInputs[id] = inputs
+				inputLock.Unlock()
+			} /*else if pid == networking.EventPacket {
 				event := prot.DecodeEvent(data)
 
 				if event.Event == networking.JumpEvent {
@@ -235,7 +225,7 @@ func playerConnection(c net.Conn, id uint8) {
 					}
 				} else if event.Event == networking.ShootEvent {
 					players.Range(func(key interface{}, val interface{}) bool {
-						player := val.(game.Player)
+						player := val.(networking.Player)
 						pid := key.(uint8)
 						if pid != id {
 							if physics.Hit(thisPlayer, player, cells) {
@@ -246,31 +236,9 @@ func playerConnection(c net.Conn, id uint8) {
 						return true
 					})
 				}
-			}
+			}*/
 
 		}
-
-		/*//Send snapshot
-		snapshot := networking.Snapshot{}
-		snapshot.ThisPlayer = thisPlayer
-		snapshot.OtherPlayers = []game.Player{}
-
-		players.Range(func(key interface{}, val interface{}) bool {
-			player := val.(game.Player)
-			pid := key.(uint8)
-			if pid != id {
-				snapshot.OtherPlayers = append(snapshot.OtherPlayers, player)
-			}
-			return true
-		})
-
-		err = prot.Send(snapshot, networking.SnapshotPacket)
-		if err != nil {
-			players.Delete(id)
-			break
-
-		}*/
-
 	}
 }
 
@@ -287,4 +255,18 @@ func rotate(x, y, a float64) (float64, float64) {
 func getTime() float64 {
 	now := time.Now()
 	return float64(now.Nanosecond())/float64(time.Second) + float64(now.Second())
+}
+
+func deletePlayer(id uint8) {
+	playerLock.Lock()
+	inputLock.Lock()
+	protLock.Lock()
+
+	delete(players, id)
+	delete(playerInputs, id)
+	delete(playerProts, id)
+
+	playerLock.Unlock()
+	inputLock.Unlock()
+	protLock.Unlock()
 }

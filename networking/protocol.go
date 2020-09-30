@@ -5,8 +5,6 @@ import (
 	"encoding/gob"
 	"io"
 	"net"
-
-	"github.com/oyberntzen/Raycasting-in-Golang/game"
 )
 
 /*
@@ -61,7 +59,8 @@ type PlayerInfo struct {
 //Input contains information about input done by a player
 type Input struct {
 	TimeStamp             float32
-	Up, Down, Left, Right float32
+	Number                uint64
+	Up, Down, Left, Right bool
 	MouseX, MouseY        int16
 	Jump, Shoot           bool
 }
@@ -72,15 +71,16 @@ Server -> Client
 
 //ServerInfo contains information about the server
 type ServerInfo struct {
-	ThisPlayer game.Player
+	ThisPlayer Player
 	Cells      [][]uint8
-	Sprites    []game.Sprite
+	Sprites    []Sprite
 }
 
 //Snapshot contains information about every player
 type Snapshot struct {
-	ThisPlayer   game.Player
-	OtherPlayers []game.Player
+	Frame        uint64
+	ThisPlayer   Player
+	OtherPlayers []Player
 }
 
 /*
@@ -187,6 +187,21 @@ func (prot *Protocol) DecodeEvent(data []byte) Event {
 /*
 Extra structs
 */
+
+//Sprite contains position and texture of a sprite
+type Sprite struct {
+	X, Y, Z, W, H float64
+	Texture       uint8
+}
+
+//Player contains a snapshot for a player. This includes xyz, pitch and angle
+type Player struct {
+	PlayerID                   uint8
+	LastInputNumber            uint64
+	LastInputs                 []Input
+	X, Y, Z, Angle, Pitch, Vel float64
+	Health                     uint8
+}
 
 //PacketID is the id of a packet
 type PacketID uint8
